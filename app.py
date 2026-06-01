@@ -149,6 +149,7 @@ def money_score():
 # Expense Tracker Features
 
 expense_data = []
+
 @app.route("/add_expense", methods=["POST"])
 def add_expense():
     try:
@@ -174,6 +175,65 @@ def calculate():
 def expense_insights():
     result =insights(client,expense_data)
     return jsonify(result)
+
+# ---------------- NET WORTH TRACKER ----------------
+# Net Worth Tracker Features
+assets_data = []
+liabilities_data = []
+
+@app.route("/net-worth", methods=["GET", "POST"])
+def get_net_worth():
+    total_assets = sum(item['amount'] for item in assets_data)
+    total_liabilities = sum(item['amount'] for item in liabilities_data)
+    return jsonify({
+        "assets": assets_data,
+        "liabilities": liabilities_data,
+        "total_assets": total_assets,
+        "total_liabilities": total_liabilities,
+        "net_worth": total_assets - total_liabilities
+    })
+
+@app.route("/add-asset", methods=["POST"])
+def add_asset():
+    try:
+        data = request.json
+        assets_data.append({
+            "id": len(assets_data),
+            "name": data["name"],
+            "amount": float(data["amount"])
+        })
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/add-liability", methods=["POST"])
+def add_liability():
+    try:
+        data = request.json
+        liabilities_data.append({
+            "id": len(liabilities_data),
+            "name": data["name"],
+            "amount": float(data["amount"])
+        })
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/delete-item", methods=["POST"])
+def delete_item():
+    try:
+        data = request.json
+        item_type = data["type"] # 'asset' or 'liability'
+        item_id = int(data["id"])
+
+        if item_type == 'asset':
+            assets_data.pop(item_id)
+        else:
+            liabilities_data.pop(item_id)
+
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
