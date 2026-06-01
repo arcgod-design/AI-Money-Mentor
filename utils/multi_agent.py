@@ -9,9 +9,6 @@ from .tax import calculate_tax
 from .stock import get_stock_price
 from .money_score import calculate_money_score
 
-# ✅ CORRECT WAY
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
 
 # ---------------- 🔍 ROUTER ----------------
 def route_query(query):
@@ -34,7 +31,7 @@ def route_query(query):
 
 
 # ---------------- 🤖 AI AGENT ----------------
-def ai_agent(query):
+def ai_agent(client, query): # add the Groq client here since we mentioned it in app.py
     try:
         res = client.chat.completions.create(
             model="llama-3.1-8b-instant",
