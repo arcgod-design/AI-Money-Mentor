@@ -1,5 +1,19 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Secrets — never commit
 .env
+*.env
+
+# macOS / editor
 .DS_Store
+.vscode/
+.idea/
+
+# Pytest / coverage
+.pytest_cache/
+htmlcov/
+.coverage
