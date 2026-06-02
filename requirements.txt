@@ -5,3 +5,4 @@ groq
 pdfplumber
 langchain
 python-dotenv
+pytest

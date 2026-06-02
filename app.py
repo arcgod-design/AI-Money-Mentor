@@ -1,15 +1,26 @@
 from flask import Flask, request, jsonify, render_template
-import yfinance as yf 
+import yfinance as yf
 import os
+import sys
 from groq import Groq
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file (if present)
 load_dotenv()
 
-# Set default API key ONLY if not already defined in environment
-if not os.getenv("GROQ_API_KEY"):
-    os.environ["GROQ_API_KEY"] = "YOUR_API_KEY"
+# ── Startup validation ───────────────────────────────────────
+# Fail fast and clearly if the required API key is missing.
+# Copy .env.example → .env and set your GROQ_API_KEY.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY or GROQ_API_KEY.strip() in ("", "your_groq_api_key_here"):
+    print(
+        "\n[ERROR] GROQ_API_KEY is not configured.\n"
+        "  1. Copy .env.example to .env\n"
+        "  2. Set your GROQ_API_KEY in .env\n"
+        "  Obtain a free key at: https://console.groq.com/\n",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 # ---------------- IMPORT UTILS ----------------
 from utils.sip import calculate_sip
 from utils.tax import calculate_tax
@@ -22,13 +33,59 @@ from utils.expense_track import calculate_expense, insights
 app = Flask(__name__)
 
 # ---------------- INIT GROQ ----------------
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=GROQ_API_KEY)
 
-
+# ── Dev-mode startup message ─────────────────────────────────
+if os.getenv("FLASK_ENV", "development") != "production":
+    print("[OK] Groq client initialised successfully.")
 # ---------------- HOME ----------------
 @app.route("/")
 def home():
     return render_template("index.html")
+
+
+# ---------------- HEALTH CHECK ----------------
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Lightweight liveness probe for deployment environments (Docker, Railway, etc.)."""
+    return jsonify({"status": "ok", "service": "AI Money Mentor"}), 200
+
+
+# ---------------- ERROR HANDLERS ----------------
+@app.errorhandler(400)
+def bad_request(error):
+    return jsonify({
+        "error": "Bad Request",
+        "message": str(error),
+        "status_code": 400
+    }), 400
+
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        "error": "Not Found",
+        "message": "The requested endpoint does not exist.",
+        "status_code": 404
+    }), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(error):
+    return jsonify({
+        "error": "Method Not Allowed",
+        "message": str(error),
+        "status_code": 405
+    }), 405
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    return jsonify({
+        "error": "Internal Server Error",
+        "message": "An unexpected error occurred. Please try again later.",
+        "status_code": 500
+    }), 500
 
 
 # ---------------- 🤖 AI CHAT ----------------
@@ -154,15 +211,23 @@ expense_data = []
 def add_expense():
     try:
         data = request.json
+
+        print("RECEIVED:", data)   # ADD THIS
+
         expense = {
             "category": data["category"],
             "amount": float(data["amount"]),
             "date": data["date"]
         }
+
         expense_data.append(expense)
+
+        print("ALL EXPENSES:", expense_data)   # ADD THIS
+
         return jsonify({"status": "success"})
-    
+
     except Exception as e:
+        print("ERROR:", str(e))   # ADD THIS
         return jsonify({"error": str(e)}),400
 
 @app.route("/calculate", methods=["GET"])

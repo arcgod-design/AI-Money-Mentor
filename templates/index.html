@@ -50,7 +50,6 @@
       padding: 0;
       box-sizing: border-box;
     }
-
     body {
       font-family: 'Instrument Sans', sans-serif;
       background: var(--bg);
@@ -71,7 +70,26 @@
         radial-gradient(circle at 50% 96%, rgba(255, 255, 255, 0.04), transparent 20%);
       z-index: -1;
     }
+    .goal-box {
+  background: white;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 10px;
+}
 
+.bar {
+  width: 100%;
+  height: 10px;
+  background: #ddd;
+  border-radius: 5px;
+}
+
+.fill {
+  height: 10px;
+  background: green;
+  border-radius: 5px;
+}
+  
     /* ── SIDEBAR ──────────────────────────────────── */
     .sidebar {
       width: 220px;
@@ -253,6 +271,28 @@
       z-index: 1;
     }
 
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      background: linear-gradient(90deg, rgba(20,200,191,0.06), rgba(212,168,67,0.06));
+      z-index: 0;
+      filter: blur(16px);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 30px 80px rgba(6,8,12,0.75), inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+
+    .card:hover::before { opacity: 1; }
+
+    /* make card content appear above decorative pseudo element */
+    .card > * { position: relative; z-index: 1; }
+
     .card-title {
       font-family: 'Syne', sans-serif;
       font-size: 13px;
@@ -343,8 +383,8 @@
       scrollbar-color: var(--bg3) transparent;
       flex: 1;
     }
-
-    .msg {
+     
+  .msg {
       max-width: 88%;
       padding: 12px 16px;
       border-radius: 18px;
@@ -470,6 +510,88 @@
         transform: translateY(-8px);
       }
     }
+
+    .chat-input-row input {
+      flex: 1;
+    }
+   
+    .chat-input-row .btn {
+      flex-shrink: 0;
+      min-width: 50px;
+      padding: 12px 16px;
+    }
+
+    .chat-welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+      text-align: center;
+      color: var(--text);
+      padding: 24px;
+    }
+
+    .chat-welcome.hidden {
+      display: none;
+    }
+
+    .chat-welcome-icon {
+      font-size: 52px;
+      margin-bottom: 16px;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .chat-welcome h3 {
+      font-family: 'Syne', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--gold2);
+      letter-spacing: 0.01em;
+    }
+
+    .chat-welcome p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 22px;
+      max-width: 240px;
+    }
+
+    .chat-features {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+      max-width: 260px;
+    }
+
+    .chat-feature-item {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.18s ease;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .chat-feature-item:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-2px);
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+    }
+
 
     /* ── INPUTS ───────────────────────────────────── */
     input[type="text"],
@@ -1083,6 +1205,230 @@ body.light-theme::before {
     radial-gradient(circle at 88% 12%, rgba(212,168,67,0.08), transparent 14%);
 }
 
+  .page-title {
+    font-size: 18px;
+  }
+}
+/* ===== GOAL TRACKER STYLING FIX ===== */
+
+#goalTracker {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  border-radius: 12px;
+  color: #eef0f5;
+  margin-top: 20px;
+}
+
+/* Inputs */
+#goalTracker input {
+  width: 100%;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+  outline: none;
+}
+
+#goalTracker input::placeholder {
+  color: rgba(255,255,255,0.4);
+}
+
+/* Button */
+#goalTracker button {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #d4a843, #14c8bf);
+  color: #0b1220;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Goal Card */
+.goal-box {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 10px;
+}
+
+/* Progress Bar Container */
+.goal-box .bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 50px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+/* Fill */
+.goal-box .fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2ecc8a, #14c8bf);
+  border-radius: 50px;
+  transition: width 0.4s ease;
+}
+
+/* Input inside goal */
+.goal-box input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: white;
+}
+.goal-card{
+margin-top:20px;
+padding:20px;
+border-radius:14px;
+background:rgba(255,255,255,0.03);
+border:1px solid rgba(255,255,255,0.08);
+}
+
+.goal-top{
+display:flex;
+justify-content:space-between;
+align-items:center;
+flex-wrap:wrap;
+gap:15px;
+}
+
+.goal-top h3{
+font-size:30px;
+margin:0;
+}
+
+.goal-amount{
+font-size:18px;
+color:#14c8bf;
+margin-top:10px;
+}
+
+.goal-progress{
+height:12px;
+background:#2d3748;
+border-radius:20px;
+overflow:hidden;
+margin:18px 0;
+}
+
+.goal-fill{
+height:100%;
+background:linear-gradient(
+90deg,
+#14c8bf,
+#2ecc8a
+);
+}
+
+.goal-percent{
+background:rgba(20,200,191,.15);
+color:#14c8bf;
+padding:8px 16px;
+border-radius:30px;
+font-weight:700;
+}
+
+.goal-save-row{
+display:flex;
+gap:12px;
+margin-top:15px;
+align-items:center;
+}
+
+.goal-save-row input{
+width:300px !important;
+min-width:300px !important;
+height:44px;
+padding:12px;
+background:rgba(255,255,255,0.05);
+border:1px solid rgba(255,255,255,0.1);
+color:#eef0f5;
+border-radius:8px;
+}
+
+.save-btn{
+width:220px;
+background:linear-gradient(
+135deg,
+#d4a843,
+#f0cc6e
+);
+border:none;
+border-radius:10px;
+font-weight:700;
+cursor:pointer;
+}
+
+.delete-btn{
+background:transparent;
+border:1px solid #ff4d4f;
+color:#ff4d4f;
+padding:8px 12px;
+border-radius:8px;
+cursor:
+pointer;
+}
+#expenseForm select,
+#expenseForm input[type="date"],
+#expenseForm input[type="number"],
+#expenseForm input[type="text"]{
+    background: rgba(255,255,255,0.05);
+    color: #e2e8f0;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+#expenseForm select:focus,
+#expenseForm input:focus{
+    border-color:#d4a843;
+    box-shadow:0 0 10px rgba(212,168,67,.3);
+}
+
+#expenseForm select option{
+    background:#0d1320;
+    color:#e2e8f0;
+}
+.goal-input{
+    flex:1;
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    color:#eef0f5;
+}
+
+.goal-input::placeholder{
+    color:#5a6a82;
+}
+.chart-wrap{
+    width:100%;
+    max-width:320px;
+    height:220px;
+    margin:0 auto;
+    position:relative;
+    overflow:hidden;
+}
+
+#portfolioChart{
+    width:100% !important;
+    height:220px !important;
+}
+
+.chart-wrap{
+    width:100%;
+    height:280px;
+    max-height:280px;
+    overflow:hidden;
+    position:relative;
+}
+
+
   </style>
 </head>
 
@@ -1164,7 +1510,7 @@ body.light-theme::before {
       <!-- DASH GRID -->
       <div class="dash-grid">
 
-        <!-- AI CHAT PANEL -->
+            <!-- AI CHAT PANEL -->
         <div class="card">
           <div class="card-title">🤖 AI Financial Advisor</div>
           <div class="chat-messages" id="dashChat">
@@ -1186,6 +1532,7 @@ body.light-theme::before {
             <button class="btn btn-gold" onclick="dashSend()" id="dashBtn">➤</button>
           </div>
         </div>
+
 
         <!-- RIGHT SIDE -->
         <div style="display:flex;flex-direction:column;gap:14px">
@@ -1214,9 +1561,10 @@ body.light-theme::before {
               </svg>
               <span>Portfolio Allocation</span>
             </div>
-            <div
-              style="position: relative; height: 160px; margin-bottom: 15px; display: flex; justify-content: center;">
-              <canvas id="portfolioChart"></canvas>
+            <div style="position:relative;height:220px;width:100%;max-width:320px;margin:0 auto;">
+              <div class="chart-wrap">
+    <canvas id="portfolioChart"></canvas>
+</div>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-top: 10px;">
               <div style="display:flex; align-items:center; gap:6px;"><span
@@ -1330,77 +1678,67 @@ body.light-theme::before {
           <div style="position: relative; height: 320px; display: flex; justify-content: center; align-items: center;">
             <canvas id="scoreChart"></canvas>
           </div>
-          <div id="score" class="page center-page">
-            <div class="page-title">💰 Money <span>Score</span></div>
-            <div class="card" style="max-width:600px">
-              <div class="card-title">Enter your financial details</div>
-              <div class="form-grid">
-                <div><label>Monthly Income (₹)</label><input type="number" id="s_income" placeholder="e.g. 80000"></div>
-                <div><label>Monthly Expenses (₹)</label><input type="number" id="s_expenses" placeholder="e.g. 40000">
-                </div>
-                <div><label>Monthly Savings (₹)</label><input type="number" id="s_savings" placeholder="e.g. 20000">
-                </div>
-                <div><label>Investments (₹)</label><input type="number" id="s_invest" placeholder="e.g. 500000"></div>
-                <div><label>Total Debt (₹)</label><input type="number" id="s_debt" placeholder="e.g. 100000"></div>
-                <div><label>Emergency Fund (months)</label><input type="number" id="s_emergency" placeholder="e.g. 6">
-                </div>
-              </div>
-            </div>
-          </div>
+<!-- ── SIP CALCULATOR ─────────────── -->
+<div id="sip" class="page">
+  <div class="page-title">📈 SIP <span>Calculator</span></div>
 
-          <!-- ── SIP CALCULATOR ─────────────── -->
-          <div id="sip" class="page">
-            <div class="page-title">SIP <span>Calculator</span></div>
-            <div
-              style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
-              <div class="card">
-                <div class="card-title">SIP Projection</div>
-                <label>Monthly Investment (₹)</label>
-                <input type="number" id="sip_monthly" placeholder="e.g. 10000">
-                <label>Annual Return Rate (%)</label>
-                <input type="number" id="sip_rate" placeholder="e.g. 12">
-                <label>Investment Period (Years)</label>
-                <input type="number" id="sip_years" placeholder="e.g. 10">
-                <button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="calcSIP()"
-                  id="sipBtn">Calculate</button>
-                <div id="sipResult" class="result-box"></div>
-              </div>
-              <div class="card" style="min-height: 380px;">
-                <div class="card-title">Wealth Growth Curve</div>
-                <div style="position: relative; height: 320px;">
-                  <canvas id="sipChart"></canvas>
-                </div>
-              </div>
-              =======
-              <div class="page-title">📈 SIP <span>Calculator</span></div>
-              <div class="card" style="max-width:480px">
-                <div class="card-title">SIP Projection</div>
-                <label>Monthly Investment (₹)</label>
-                <input type="number" id="sip_monthly" placeholder="e.g. 10000">
-                <label>Annual Return Rate (%)</label>
-                <input type="number" id="sip_rate" placeholder="e.g. 12">
-                <label>Investment Period (Years)</label>
-                <input type="number" id="sip_years" placeholder="e.g. 10">
-                <button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="calcSIP()"
-                  id="sipBtn">Calculate</button>
-                <div id="sipResult" class="result-box"></div>
-                >>>>>>> upstream/main
-              </div>
-              <div id="sip" class="page center-page">
-                <div class="page-title">📈 SIP <span>Calculator</span></div>
-                <div class="card" style="max-width:480px">
-                  <div class="card-title">SIP Projection</div>
-                  <label>Monthly Investment (₹)</label>
-                  <input type="number" id="sip_monthly" placeholder="e.g. 10000">
-                  <label>Annual Return Rate (%)</label>
-                  <input type="number" id="sip_rate" placeholder="e.g. 12">
-                  <label>Investment Period (Years)</label>
-                  <input type="number" id="sip_years" placeholder="e.g. 10">
-                  <button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="calcSIP()"
-                    id="sipBtn">Calculate</button>
-                  <div id="sipResult" class="result-box"></div>
-                </div>
-              </div>
+  <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
+
+    <div class="card">
+      <div class="card-title">SIP Projection</div>
+
+      <label>Monthly Investment (₹)</label>
+      <input type="number" id="sip_monthly" placeholder="e.g. 10000">
+
+      <label>Annual Return Rate (%)</label>
+      <input type="number" id="sip_rate" placeholder="e.g. 12">
+
+      <label>Investment Period (Years)</label>
+      <input type="number" id="sip_years" placeholder="e.g. 10">
+
+      <button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="calcSIP()" id="sipBtn">
+        Calculate
+      </button>
+
+      <div id="sipResult" class="result-box"></div>
+    </div>
+
+    <div class="card" style="min-height: 380px;">
+      <div class="card-title">Wealth Growth Curve</div>
+      <div style="position: relative; height: 320px;">
+        <canvas id="sipChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── STOCK CHECK ─────────────── -->
+<div id="stock" class="page">
+  <div class="page-title">Stock <span>Checker</span></div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
+    <div class="card">
+      <div class="card-title">Live Stock Price (NSE/Global)</div>
+
+      <label>Stock Symbol</label>
+      <input type="text" id="stockSym" placeholder="e.g. TCS, RELIANCE, AAPL">
+
+      <button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="checkStock()" id="stockBtn">
+        Get Price
+      </button>
+
+      <div id="stockResult" class="result-box"></div>
+    </div>
+
+    <div class="card" style="min-height: 380px;">
+      <div class="card-title">30-Day Historical Trend</div>
+      <div style="position: relative; height: 320px;">
+        <canvas id="stockChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
 
               <!-- ── STOCK CHECK ─────────────── -->
               <div id="stock" class="page">
@@ -1480,21 +1818,59 @@ body.light-theme::before {
                         </div>
                       </div>
 
-                      <!-- ── MULTI AGENT ─────────────── -->
-                      <div id="agent" class="page center-page">
-                        <div class="page-title">🧠 Multi <span>Agent</span></div>
-                        <div class="card" style="max-width:600px">
-                          <div class="card-title">Orchestrated Agent Query</div>
-                          <label>Query (natural language or commands)</label>
-                          <textarea id="agentQuery" rows="3"
-                            placeholder="e.g. Plan a SIP of 5000 at 12% for 10 years and suggest tax saving options"
-                            style="padding:12px 14px;resize:vertical"></textarea>
-                          <button class="btn btn-gold" style="margin-top:14px;width:100%" onclick="runAgent()"
-                            id="agentBtn">Run
-                            Agents</button>
-                          <div id="agentResult" class="result-box"></div>
-                        </div>
-                      </div>
+<div id="expense" class="page">
+
+<div class="page-title">💲 Expense Track and Insights</div>
+
+<div class="card" id="goalTracker">
+
+<h2 style="margin-bottom:15px;color:#d4a843;">
+🎯 Financial Goal Tracker
+</h2>
+
+<div style="display:flex;gap:15px;flex-wrap:wrap;">
+
+<input
+type="text"
+id="goalName"
+placeholder="Goal name (e.g. Phone)"
+class="goal-input"
+>
+
+<input
+type="number"
+id="goalTarget"
+placeholder="Target amount (₹)"
+class="goal-input"
+>
+<button
+onclick="addGoal()"
+class="btn btn-gold"
+style="width:220px;"
+>
++ Add Goal
+</button>
+
+</div>
+
+<div id="goalContainer"></div>
+
+</div>
+<!-- FINANCIAL GOAL TRACKER -->
+
+<form id="expenseForm">
+    <select id="category" required>
+        <option value="">Select Category</option>
+        <option value="Food">Food</option>
+        <option value="Rent">Rent</option>
+        <option value="Travel">Travel</option>
+        <option value="Shopping">Shopping</option>
+        <option value="Other">Other</option>
+    </select>
+        <input type="number" id="amount" placeholder="Amount (₹)" required>
+        <input type="date" id="date" required>
+        <button type="submit">Add Expense</button>
+      </form>
 
                       <!---------- EXPENSE TRACK------------------->
                       <div id="expense" class="page">
@@ -1539,6 +1915,13 @@ body.light-theme::before {
                         <div class="cards" id="categoryCards"></div>
 
 
+      <div class="glass-container">
+    ...
+</div>
+
+<div style="margin-top:20px;">
+    <canvas id="expenseChart"></canvas>
+</div>
                         <div class="glass-container">
                           <h2>AI-Money Mentor's Insights</h2>
                           <br>
@@ -1615,21 +1998,52 @@ body.light-theme::before {
 
                       <canvas id="expenseChart"></canvas>
 
+</div>
 
+</div><!-- /main -->
+    
+  <!-- Loading charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
                     </div><!-- /main -->
 
                     <!-- Loading charts -->
                     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-                    <script>
-                      /* ══════════════════════════════════════════════
-                         GLOBAL CHART INSTANCES & HELPERS
-                      ══════════════════════════════════════════════ */
-                      let sipChartInstance = null;
-                      let stockChartInstance = null;
-                      let scoreChartInstance = null;
-                      let portfolioChartInstance = null;
+/* ══════════════════════════════════════════════
+   GLOBAL CHART INSTANCES & HELPERS
+══════════════════════════════════════════════ */
+let sipChartInstance = null;
+let stockChartInstance = null;
+let scoreChartInstance = null;
+let portfolioChartInstance = null;
+
+function initPortfolioChart() {
+  const canvasEl = document.getElementById('portfolioChart');
+  if (!canvasEl) return;
+
+  const ctx = canvasEl.getContext('2d');
+
+  portfolioChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Equity', 'ELSS', 'Debt', 'Insurance'],
+      datasets: [{
+        data: [40, 27, 18, 15],
+        backgroundColor: ['#d4a843', '#14c8bf', '#5a6a82', '#2ecc8a'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false }
+      },
+      cutout: '70%'
+    }
+  });
+}
 
                       function initPortfolioChart() {
                         const canvasEl = document.getElementById('portfolioChart');
@@ -1688,6 +2102,54 @@ body.light-theme::before {
                         }
                       }
 
+    /* ══════════════════════════════════════════════
+       DASHBOARD CHAT
+    ══════════════════════════════════════════════ */
+
+    function appendMsg(boxId, role, text) {
+      const box = document.getElementById(boxId);
+      const d = document.createElement('div');
+      d.className = `msg ${role}`;
+      d.innerHTML = `<div class="sender">${role === 'user' ? 'You' : 'AI Advisor'}</div>${text}`;
+      box.appendChild(d);
+      box.scrollTop = box.scrollHeight;
+    }
+async function dashSend() {
+  const inp = document.getElementById('dashMsg');
+  const msg = inp.value.trim();
+  if (!msg) return;
+
+  inp.value = '';
+  appendMsg('dashChat', 'user', msg);
+
+  setLoading('dashBtn', true);
+
+  try {
+    const data = await apiFetch('/chat', { message: msg });
+
+    if (data.reply) {
+      appendMsg('dashChat', 'bot', data.reply);
+    } else if (data.error) {
+      appendMsg(
+        'dashChat',
+        'bot',
+        "⚠ " + (data.error.message || "AI error occurred")
+      );
+    } else {
+      appendMsg('dashChat', 'bot', "⚠ No response from server");
+    }
+
+  } catch (e) {
+    appendMsg('dashChat', 'bot', '⚠ Could not reach server. Is Flask running?');
+  }
+
+  setLoading('dashBtn', false);
+}
+
+    function dashQuick(text) {
+      document.getElementById('dashMsg').value = text;
+      dashSend();
+    }
                       document.querySelectorAll('.nav-item').forEach(el => {
                         el.addEventListener('click', function (e) {
                           showPage(this.dataset.page, e);
@@ -2294,7 +2756,55 @@ body.light-theme::before {
                           : '₹' + (fv / 1e5).toFixed(1) + 'L';
                       }
 
-                      updateSIP();
+    updateSIP();
+
+  
+/* ══════════════════════════════════════════════
+          EXPENSE TRACKER
+══════════════════════════════════════════════ */
+document.getElementById("expenseForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const category = document.getElementById("category").value;
+    const amount = document.getElementById("amount").value;
+    const date = document.getElementById("date").value;
+
+    console.log(category, amount, date);
+
+    if (!category || !amount || !date) {
+        alert("Please fill all fields");
+        return;
+    }
+
+    const expense = {
+        category: category,
+        amount: parseFloat(amount),
+        date: date
+    };
+
+console.log("Sending Expense:", expense);
+
+    try {
+        const response = await fetch("/add_expense", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(expense)
+        });
+
+       const data = await response.json();
+console.log(data);
+
+        if (data.status === "success") {
+            document.getElementById("expenseForm").reset();
+            loadExpenses();
+        }
+    } catch (error) {
+        console.error(error);
+        alert("Error adding expense");
+    }
+});
 
 
                       /* ══════════════════════════════════════════════
@@ -2344,8 +2854,16 @@ body.light-theme::before {
               </div>
               `;
 
-                          const insightRes = await fetch("/insights");
-                          const insightData = await insightRes.json();
+       let insightData = {
+    insights: "No insights available"
+};
+
+try{
+    const insightRes = await fetch("/insights");
+    insightData = await insightRes.json();
+}catch(err){
+    console.log("Insights failed", err);
+}
 
                           /* ---------- TOTAL CARD ---------- */
 
@@ -2513,57 +3031,158 @@ body.light-theme::before {
           `;
                           });
 
-                          const liabList = document.getElementById('liabList');
-                          liabList.innerHTML = '';
-                          data.liabilities.forEach((item, idx) => {
-                            liabList.innerHTML += `
-            <tr style="border-bottom: 1px solid var(--border);">
-              <td style="padding: 8px;">${item.name}</td>
-              <td style="padding: 8px; text-align: right;">₹${fmtNum(item.amount)}</td>
-              <td style="padding: 8px; text-align: center;"><button class="btn btn-ghost" style="padding: 4px 8px; font-size: 10px;" onclick="deleteNWItem('liability', ${idx})">✖</button></td>
-            </tr>
-          `;
-                          });
-                        } catch (e) {
-                          console.error('Error loading net worth:', e);
-                        }
-                      }
+loadExpenses();
+let goals = [];
 
-                      async function addNWItem(type) {
-                        const name = type === 'asset' ? document.getElementById('assetName').value : document.getElementById('liabName').value;
-                        const amt = type === 'asset' ? document.getElementById('assetAmt').value : document.getElementById('liabAmt').value;
+function addGoal(){
 
-                        if (!name || !amt) { alert('Please enter both name and amount.'); return; }
+const name =
+document.getElementById("goalName").value.trim();
 
-                        const url = type === 'asset' ? '/add-asset' : '/add-liability';
-                        try {
-                          await apiFetch(url, { name, amount: amt });
-                          if (type === 'asset') {
-                            document.getElementById('assetName').value = '';
-                            document.getElementById('assetAmt').value = '';
-                          } else {
-                            document.getElementById('liabName').value = '';
-                            document.getElementById('liabAmt').value = '';
-                          }
-                          loadNetWorth();
-                        } catch (e) {
-                          alert('Error adding item.');
-                        }
-                      }
+const target =
+parseFloat(
+document.getElementById("goalTarget").value
+);
 
-                      async function deleteNWItem(type, id) {
-                        try {
-                          await apiFetch('/delete-item', { type, id });
-                          loadNetWorth();
-                        } catch (e) {
-                          alert('Error deleting item.');
-                        }
-                      }
+if(!name || !target){
+alert("Enter valid goal details");
+return;
+}
 
-                      // Initial load for net worth if page is active
-                      if (document.getElementById('networth').classList.contains('active')) {
-                        loadNetWorth();
-                      }
+goals.push({
+name:name,
+target:target,
+saved:0
+});
+
+document.getElementById("goalName").value="";
+document.getElementById("goalTarget").value="";
+
+renderGoals();
+}
+
+function addSavings(index){
+
+const amount =
+parseFloat(
+document.getElementById(
+`save-${index}`
+).value
+);
+
+if(!amount || amount<=0){
+alert("Enter valid amount");
+return;
+}
+
+goals[index].saved += amount;
+
+renderGoals();
+}
+
+function deleteGoal(index){
+
+goals.splice(index,1);
+
+renderGoals();
+}
+
+function renderGoals(){
+
+const container =
+document.getElementById(
+"goalContainer"
+);
+
+container.innerHTML="";
+
+goals.forEach((goal,index)=>{
+
+const percent =
+Math.min(
+(goal.saved/goal.target)*100,
+100
+);
+
+const remaining =
+Math.max(
+goal.target-goal.saved,
+0
+);
+
+container.innerHTML += `
+
+<div class="goal-card">
+
+<div class="goal-top">
+
+<div>
+
+<h3>${goal.name}</h3>
+
+<div class="goal-amount">
+₹${goal.saved.toLocaleString()}
+/
+₹${goal.target.toLocaleString()}
+</div>
+
+<div style="margin-top:6px;color:#94a3b8;">
+Remaining:
+₹${remaining.toLocaleString()}
+</div>
+
+</div>
+
+<div style="
+display:flex;
+align-items:center;
+gap:10px;
+">
+
+<div class="goal-percent">
+${percent.toFixed(0)}%
+</div>
+
+<button
+class="delete-btn"
+onclick="deleteGoal(${index})"
+>
+🗑
+</button>
+
+</div>
+
+</div>
+
+<div class="goal-progress">
+
+<div
+class="goal-fill"
+style="width:${percent}%"
+></div>
+
+</div>
+
+<div class="goal-save-row">
+
+<input
+id="save-${index}"
+type="number"
+placeholder="Add savings amount (₹)"
+>
+
+<button
+class="save-btn"
+onclick="addSavings(${index})"
+>
+Add Savings
+</button>
+
+</div>
+
+</div>
+`;
+});
 
                       // Update loadNetWorth when navigating to the page
                       const originalShowPage = showPage;
@@ -2592,6 +3211,8 @@ body.light-theme::before {
                       });
 
                     </script>
+}
+  </script>
 </body>
 
 </html>

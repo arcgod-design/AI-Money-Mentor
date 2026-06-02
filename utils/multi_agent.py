@@ -13,8 +13,8 @@ from .tax import calculate_tax
 from .stock import get_stock_price
 from .money_score import calculate_money_score
 
-# ✅ CORRECT WAY
-client = Groq(api_key=os.getenv("GROQ_API_KEY", "YOUR_API_KEY"))
+# Groq client — key is validated at startup in app.py; no fallback here.
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # ---------------- 🔢 ROBUST FINANCIAL NUMBER PARSER ----------------
 def extract_financial_numbers(query):
