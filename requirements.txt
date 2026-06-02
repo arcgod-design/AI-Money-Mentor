@@ -6,3 +6,4 @@ pdfplumber
 langchain
 python-dotenv
 pytest
+flask-sqlalchemy==3.1.1

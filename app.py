@@ -32,6 +32,16 @@ from utils.expense_track import calculate_expense, insights
 
 app = Flask(__name__)
 
+# ---------------- INIT DATABASE ----------------
+from models import db, Expense, Asset, Liability
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+
 # ---------------- INIT GROQ ----------------
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -205,49 +215,44 @@ def money_score():
 
 # Expense Tracker Features
 
-expense_data = []
-
 @app.route("/add_expense", methods=["POST"])
 def add_expense():
     try:
         data = request.json
-
-        print("RECEIVED:", data)   # ADD THIS
-
-        expense = {
-            "category": data["category"],
-            "amount": float(data["amount"]),
-            "date": data["date"]
-        }
-
-        expense_data.append(expense)
-
-        print("ALL EXPENSES:", expense_data)   # ADD THIS
-
+        expense = Expense(
+            category=data["category"],
+            amount=float(data["amount"]),
+            date=data["date"]
+        )
+        db.session.add(expense)
+        db.session.commit()
         return jsonify({"status": "success"})
 
     except Exception as e:
-        print("ERROR:", str(e))   # ADD THIS
-        return jsonify({"error": str(e)}),400
+        return jsonify({"error": str(e)}), 400
 
 @app.route("/calculate", methods=["GET"])
 def calculate():
+    expense_data = [e.to_dict() for e in Expense.query.order_by(Expense.id).all()]
     result = calculate_expense(expense_data)
     result["expenses"] = expense_data
     return jsonify(result)
 
 @app.route("/insights", methods=["GET"])
 def expense_insights():
+    expense_data = [e.to_dict() for e in Expense.query.order_by(Expense.id).all()]
     result =insights(client,expense_data)
     return jsonify(result)
 
 # ---------------- NET WORTH TRACKER ----------------
 # Net Worth Tracker Features
-assets_data = []
-liabilities_data = []
 
 @app.route("/net-worth", methods=["GET", "POST"])
 def get_net_worth():
+    assets = Asset.query.order_by(Asset.id).all()
+    liabilities = Liability.query.order_by(Liability.id).all()
+    assets_data = [a.to_dict(i) for i, a in enumerate(assets)]
+    liabilities_data = [l.to_dict(i) for i, l in enumerate(liabilities)]
     total_assets = sum(item['amount'] for item in assets_data)
     total_liabilities = sum(item['amount'] for item in liabilities_data)
     return jsonify({
@@ -262,11 +267,9 @@ def get_net_worth():
 def add_asset():
     try:
         data = request.json
-        assets_data.append({
-            "id": len(assets_data),
-            "name": data["name"],
-            "amount": float(data["amount"])
-        })
+        asset = Asset(name=data["name"], amount=float(data["amount"]))
+        db.session.add(asset)
+        db.session.commit()
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -275,11 +278,9 @@ def add_asset():
 def add_liability():
     try:
         data = request.json
-        liabilities_data.append({
-            "id": len(liabilities_data),
-            "name": data["name"],
-            "amount": float(data["amount"])
-        })
+        liability = Liability(name=data["name"], amount=float(data["amount"]))
+        db.session.add(liability)
+        db.session.commit()
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -289,13 +290,16 @@ def delete_item():
     try:
         data = request.json
         item_type = data["type"] # 'asset' or 'liability'
-        item_id = int(data["id"])
+        item_id = int(data["id"]) # positional index from the frontend
 
         if item_type == 'asset':
-            assets_data.pop(item_id)
+            rows = Asset.query.order_by(Asset.id).all()
+            db.session.delete(rows[item_id])
         else:
-            liabilities_data.pop(item_id)
+            rows = Liability.query.order_by(Liability.id).all()
+            db.session.delete(rows[item_id])
 
+        db.session.commit()
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400

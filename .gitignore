@@ -16,4 +16,8 @@ __pycache__/
 # Pytest / coverage
 .pytest_cache/
 htmlcov/
-.coverage
+.coverage
+
+# Local database (runtime artifact)
+*.db
+instance/
