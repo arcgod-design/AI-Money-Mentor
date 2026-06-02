@@ -25,6 +25,23 @@
       --border: rgba(255, 255, 255, 0.06);
       --glow: rgba(212, 168, 67, 0.18);
     }
+    body.light-theme {
+  --bg: #f4f6f9;
+  --bg2: #ffffff;
+  --bg3: #e8edf3;
+
+  --text: #1f2937;
+  --muted: #6b7280;
+
+  --border: rgba(0,0,0,0.08);
+
+  --gold: #d4a843;
+  --gold2: #f0cc6e;
+
+  --teal: #14c8bf;
+  --red: #e05252;
+  --green: #2ecc8a;
+}
 
     *,
     *::before,
@@ -1144,6 +1161,50 @@
         font-size: 22px;
       }
 
+      .page-title {
+        font-size: 18px;
+      }
+    }
+    body.light-theme .sidebar {
+  background: #ffffff;
+  border-right: 1px solid rgba(0,0,0,0.08);
+}
+
+body.light-theme .card {
+  background: #ffffff;
+  color: var(--text);
+}
+
+body.light-theme .stat-card {
+  background: #ffffff;
+}
+
+body.light-theme .chat-messages {
+  background: #f9fafb;
+}
+
+body.light-theme .msg.bot {
+  background: #ffffff;
+}
+
+body.light-theme input,
+body.light-theme textarea,
+body.light-theme select {
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+}
+
+body.light-theme {
+  background: #f4f6f9;
+}
+
+body.light-theme::before {
+  background:
+    radial-gradient(circle at 16% 16%, rgba(20,200,191,0.08), transparent 18%),
+    radial-gradient(circle at 88% 12%, rgba(212,168,67,0.08), transparent 14%);
+}
+
   .page-title {
     font-size: 18px;
   }
@@ -1385,6 +1446,13 @@ pointer;
   <!-- ══════════ SIDEBAR ══════════ -->
   <div class="sidebar">
     <div class="logo">₹ Money Mentor</div>
+    <button
+       class="btn btn-ghost"
+       id="themeToggle"
+       onclick="toggleTheme()"
+       style="margin-bottom:15px;width:100%;">
+       ☀️ Light Mode
+    </button>
 
     <div class="nav-item active" data-page="dashboard"><span class="icon">🏠</span> Dashboard</div>
     <div class="nav-item" data-page="chat"><span class="icon">🤖</span> AI Chat</div>
@@ -3116,6 +3184,33 @@ Add Savings
 `;
 });
 
+                      // Update loadNetWorth when navigating to the page
+                      const originalShowPage = showPage;
+                      showPage = function (name, e) {
+                        originalShowPage(name, e);
+                        if (name === 'networth') loadNetWorth();
+                      };
+                      function toggleTheme() {
+                        document.body.classList.toggle("light-theme");
+                        const btn = document.getElementById("themeToggle");
+                        if(document.body.classList.contains("light-theme")) {
+                          localStorage.setItem("theme","light");
+                          btn.innerHTML = "🌙 Dark Mode";
+                        } else {
+                          localStorage.setItem("theme","dark");
+                          btn.innerHTML = "☀️ Light Mode";
+                        }
+                      }
+                      window.addEventListener("DOMContentLoaded", () => {
+                        const savedTheme = localStorage.getItem("theme");
+                        const btn = document.getElementById("themeToggle");
+                        if(savedTheme === "light") {
+                          document.body.classList.add("light-theme");
+                          btn.innerHTML = "🌙 Dark Mode";
+                        }
+                      });
+
+                    </script>
 }
   </script>
 </body>
