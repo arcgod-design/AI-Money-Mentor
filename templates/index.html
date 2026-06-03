@@ -1804,23 +1804,6 @@ style="width:220px;"
         <button type="submit">Add Expense</button>
       </form>
 
-                      <!---------- EXPENSE TRACK------------------->
-                      <div id="expense" class="page">
-                        <div class="page-title">💲 Expense Track and Insights</div>
-                        <form id="expenseForm">
-                          <select id="category" required>
-                            <option value="">Select Category</option>
-                            <option value="Food">Food</option>
-                            <option value="Rent">Rent</option>
-                            <option value="Travel">Travel</option>
-                            <option value="Shopping">Shopping</option>
-                            <option value="Other">Other</option>
-                          </select>
-                          <input type="number" id="amount" placeholder="Amount (₹)" required aria-label="amount input">
-                          <input type="date" id="date" required aria-label="date input">
-                          <button type="submit">Add Expense</button>
-                        </form>
-
                         <div class="cards">
                           <div class="card" id="totalCard">
                             <h2>Total Spend</h2>
@@ -1928,19 +1911,10 @@ style="width:220px;"
                         </div>
                       </div>
 
-                      <canvas id="expenseChart"></canvas>
-
-</div>
-
 </div><!-- /main -->
-    
-  <!-- Loading charts -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-                    </div><!-- /main -->
-
-                    <!-- Loading charts -->
-                    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Loading charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 /* ══════════════════════════════════════════════
    GLOBAL CHART INSTANCES & HELPERS
@@ -2737,41 +2711,6 @@ console.log(data);
         alert("Error adding expense");
     }
 });
-
-
-                      /* ══════════════════════════════════════════════
-                                EXPENSE TRACKER
-                      ══════════════════════════════════════════════ */
-
-                      document.getElementById("expenseForm").addEventListener("submit", async function (e) {
-                        e.preventDefault();
-
-                        const expense = {
-                          category: document.getElementById("category").value,
-                          amount: parseFloat(document.getElementById("amount").value),
-                          date: document.getElementById("date").value
-                        };
-
-                        try {
-                          const response = await fetch("/add_expense", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json"
-                            },
-                            body: JSON.stringify(expense)
-                          });
-
-                          const data = await response.json();
-
-                          if (data.status === "success") {
-                            document.getElementById("expenseForm").reset();
-                            loadExpenses();
-                          }
-                        } catch (error) {
-                          console.error(error);
-                          alert("Error adding expense");
-                        }
-                      });
 
 
                       async function loadExpenses() {
