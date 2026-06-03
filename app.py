@@ -99,7 +99,7 @@ def internal_server_error(error):
 
 
 # ---------------- 🤖 AI CHAT ----------------
-@@app.route("/chat", methods=["POST"])
+@app.route("/chat", methods=["POST"])
 def chat():
     try:
         data = request.json
