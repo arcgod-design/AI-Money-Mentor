@@ -64,11 +64,21 @@ def get_stock_price(symbol):
         except Exception as info_err:
             print(f"Info fetch failed for {symbol}: {info_err}")
 
+        # Get news safely
+        news_data = []
+        try:
+            news = stock.news
+            if news:
+                news_data = news
+        except Exception:
+            pass
+
         ret = {
             "symbol": symbol,
             "price": round(price, 2),
             "history": history_data,
-            "metrics": metrics
+            "metrics": metrics,
+            "news": news_data
         }
         STOCK_CACHE[symbol] = (ret, time.time())
         return ret

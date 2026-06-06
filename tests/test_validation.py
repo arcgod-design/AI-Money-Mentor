@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, patch
 sys.modules['yfinance'] = MagicMock()
 sys.modules['groq'] = MagicMock()
 sys.modules['pdfplumber'] = MagicMock()
+sys.modules['apscheduler'] = MagicMock()
+sys.modules['apscheduler.schedulers'] = MagicMock()
+sys.modules['apscheduler.schedulers.background'] = MagicMock()
 
 # Mock flask_sqlalchemy
 mock_sqlalchemy = MagicMock()
@@ -101,6 +104,27 @@ class TestEndpointValidation(unittest.TestCase):
     def setUp(self):
         self.app = app.test_client()
         self.app.testing = True
+        
+        from models import Expense, Asset, Liability, BudgetLimit, BudgetAlert
+        Expense.query = MagicMock()
+        Asset.query = MagicMock()
+        Liability.query = MagicMock()
+        BudgetLimit.query = MagicMock()
+        BudgetAlert.query = MagicMock()
+        
+        Asset.id = MagicMock()
+        Liability.id = MagicMock()
+        
+        Expense.category = MagicMock()
+        Expense.date = MagicMock()
+        BudgetLimit.category = MagicMock()
+        BudgetAlert.category = MagicMock()
+        BudgetAlert.year_month = MagicMock()
+        BudgetAlert.threshold = MagicMock()
+        
+        limit_mock = MagicMock()
+        limit_mock.limit_amount = 1000.0
+        BudgetLimit.query.filter_by.return_value.first.return_value = limit_mock
 
     def test_sip_endpoint(self):
         # Valid payload
@@ -260,13 +284,9 @@ class TestEndpointValidation(unittest.TestCase):
         from models import Asset, Liability
         # Setup mock asset and liability queries
         mock_asset = MagicMock()
-        Asset.id = MagicMock()
-        Asset.query = MagicMock()
         Asset.query.order_by.return_value.all.return_value = [mock_asset]
         
         mock_liability = MagicMock()
-        Liability.id = MagicMock()
-        Liability.query = MagicMock()
         Liability.query.order_by.return_value.all.return_value = [mock_liability]
 
         # Valid type and id
@@ -287,6 +307,28 @@ class TestEndpointValidation(unittest.TestCase):
         response = self.app.post('/delete-item', json={
             "type": "asset",
             "id": 10
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_budget_limits_endpoint(self):
+
+        # Valid payload
+        response = self.app.post('/budget/limits', json={
+            "category": "Food",
+            "limit_amount": 500
+        })
+        self.assertEqual(response.status_code, 200)
+
+        # Missing limit_amount
+        response = self.app.post('/budget/limits', json={
+            "category": "Food"
+        })
+        self.assertEqual(response.status_code, 400)
+
+        # Negative limit_amount
+        response = self.app.post('/budget/limits', json={
+            "category": "Food",
+            "limit_amount": -10
         })
         self.assertEqual(response.status_code, 400)
 

@@ -14,13 +14,15 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY or GROQ_API_KEY.strip() in ("", "your_groq_api_key_here"):
     print(
-        "\n[ERROR] GROQ_API_KEY is not configured.\n"
+        "\n[WARNING] GROQ_API_KEY is not configured. AI features will run in offline mode.\n"
         "  1. Copy .env.example to .env\n"
         "  2. Set your GROQ_API_KEY in .env\n"
         "  Obtain a free key at: https://console.groq.com/\n",
         file=sys.stderr,
     )
-    sys.exit(1)
+    client = None
+else:
+    client = Groq(api_key=GROQ_API_KEY)
 # ---------------- IMPORT UTILS ----------------
 from utils.sip import calculate_sip
 from utils.tax import calculate_tax
@@ -34,7 +36,7 @@ from utils.validation import ValidationError, validate_string, validate_float, v
 app = Flask(__name__)
 
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -44,15 +46,42 @@ with app.app_context():
     db.create_all()
 
 # ---------------- INIT GROQ ----------------
-client = Groq(api_key=GROQ_API_KEY)
+# client is initialized in the startup validation block above
 
 # ── Dev-mode startup message ─────────────────────────────────
 if os.getenv("FLASK_ENV", "development") != "production":
-    print("[OK] Groq client initialised successfully.")
-# ---------------- HOME ----------------
+    if client:
+        print("[OK] Groq client initialised successfully.")
+    else:
+        print("[WARNING] Groq client is running in offline mode.")
+# ---------------- HOME / PAGES ----------------
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template("dashboard.html", active_page="dashboard")
+
+@app.route("/stock", methods=["GET"])
+def stock():
+    return render_template("stock.html", active_page="stock")
+
+@app.route("/pdf-parser", methods=["GET"])
+def pdf_parser():
+    return render_template("pdf.html", active_page="pdf")
+
+@app.route("/agent-page", methods=["GET"])
+def agent_page():
+    return render_template("agent.html", active_page="agent")
+
+@app.route("/expense", methods=["GET"])
+def expense():
+    return render_template("expense.html", active_page="expense")
+
+@app.route("/networth", methods=["GET"])
+def networth():
+    return render_template("networth.html", active_page="networth")
+
+@app.route("/budget", methods=["GET"])
+def budget():
+    return render_template("budget.html", active_page="budget")
 
 
 # ---------------- HEALTH CHECK ----------------
@@ -109,9 +138,16 @@ def internal_server_error(error):
 
 
 # ---------------- 🤖 AI CHAT ----------------
-@app.route("/chat", methods=["POST"])
+@app.route("/chat", methods=["GET", "POST"])
 def chat():
+    if request.method == "GET":
+        return render_template("chat.html", active_page="chat")
     try:
+        if client is None:
+            return jsonify({
+                "reply": "AI Money Mentor is offline because GROQ_API_KEY is not configured. Please set GROQ_API_KEY in your env/config files."
+            })
+
         data = request.json or {}
         if not isinstance(data, dict):
             raise ValidationError("Request body must be a JSON object")
@@ -121,17 +157,7 @@ def chat():
             raise ValidationError("'history' must be a list")
 
         # Build messages: system prompt + last 10 history turns + current message
-        messages = [{"role": "system", "content": "You are a financial advisor for India."}]
-        messages += history[-10:]
-        messages.append({"role": "user", "content": msg})
-
-        res = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """
-You are an expert AI financial advisor for Indian users.
+        system_content = """You are an expert AI financial advisor for Indian users.
 
 Your job:
 - Help users manage money smartly
@@ -154,11 +180,16 @@ Advice:
 - Keep it simple and actionable
 
 Tone:
-- Friendly, practical, and easy to understand
-"""
-                },
-                {"role": "user", "content": msg}
-            ]
+- Friendly, practical, and easy to understand"""
+
+        messages = [{"role": "system", "content": system_content}]
+        for h in history[-10:]:
+            messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+        messages.append({"role": "user", "content": msg})
+
+        res = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages
         )
         return jsonify({
             "reply": res.choices[0].message.content
@@ -175,8 +206,10 @@ Tone:
 
 
 # ---------------- 💸 SIP ----------------
-@app.route("/sip", methods=["POST"])
+@app.route("/sip", methods=["GET", "POST"])
 def sip():
+    if request.method == "GET":
+        return render_template("sip.html", active_page="sip")
     try:
         data = request.json or {}
         if not isinstance(data, dict):
@@ -197,7 +230,7 @@ def sip():
     except ValidationError as e:
         raise e
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})
 
 
 # ---------------- 📊 STOCK ----------------
@@ -216,11 +249,13 @@ def portfolio():
     except ValidationError as e:
         raise e
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})
     
 # ---------------- 💸 TAX ----------------
-@app.route("/tax", methods=["POST"])
+@app.route("/tax", methods=["GET", "POST"])
 def tax():
+    if request.method == "GET":
+        return render_template("tax.html", active_page="tax")
     try:
         data = request.json or {}
         if not isinstance(data, dict):
@@ -241,7 +276,7 @@ def tax():
     except ValidationError as e:
         raise e
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})
 
 
 # ---------------- 📄 PDF ----------------
@@ -253,13 +288,17 @@ def upload():
         return jsonify({"data": result})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})
 
 
 # ---------------- 🧠 MULTI AGENT ----------------
 @app.route("/agent", methods=["POST"])
 def run_agent_route():
     try:
+        if client is None:
+            return jsonify({
+                "error": "AI Multi-Agent is offline because GROQ_API_KEY is not configured. Please set GROQ_API_KEY in your env/config files."
+            })
         data = request.json or {}
         if not isinstance(data, dict):
             raise ValidationError("Request body must be a JSON object")
@@ -270,12 +309,14 @@ def run_agent_route():
     except ValidationError as e:
         raise e
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})
 
 
 # ---------------- 💰 MONEY SCORE ----------------
-@app.route("/money-score", methods=["POST"])
+@app.route("/money-score", methods=["GET", "POST"])
 def money_score():
+    if request.method == "GET":
+        return render_template("score.html", active_page="score")
     try:
         data = request.json or {}
         if not isinstance(data, dict):
@@ -307,7 +348,7 @@ def money_score():
     except ValidationError as e:
         raise e
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)})
 
 
 # Expense Tracker Features
@@ -329,6 +370,11 @@ def add_expense():
         )
         db.session.add(expense)
         db.session.commit()
+        
+        # Check thresholds
+        ym = expense.date[:7] if len(expense.date) >= 7 else None
+        run_threshold_checks(expense.category, ym)
+        
         return jsonify({"status": "success"})
 
     except ValidationError as e:
@@ -432,6 +478,139 @@ def delete_item():
         raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+# Helper to check budget thresholds
+def run_threshold_checks(category, year_month=None):
+    if not year_month:
+        import datetime
+        year_month = datetime.datetime.now().strftime("%Y-%m")
+        
+    limit = BudgetLimit.query.filter_by(category=category).first()
+    if not limit or limit.limit_amount <= 0:
+        return []
+        
+    expenses = Expense.query.filter(
+        Expense.category == category,
+        Expense.date.like(f"{year_month}%")
+    ).all()
+    
+    total_spent = sum(e.amount for e in expenses)
+    pct = total_spent / limit.limit_amount
+    
+    triggered = []
+    for threshold in [100, 90, 80]:
+        target = threshold / 100.0
+        if pct >= target:
+            exists = BudgetAlert.query.filter_by(
+                category=category,
+                year_month=year_month,
+                threshold=threshold
+            ).first()
+            if not exists:
+                alert = BudgetAlert(
+                    category=category,
+                    year_month=year_month,
+                    threshold=threshold
+                )
+                db.session.add(alert)
+                triggered.append(threshold)
+                print(
+                    f"\n[EMAIL ALERT] To: user@example.com\n"
+                    f"Subject: Budget Alert: {category} spending reached {threshold}%\n"
+                    f"Body: You have spent ₹{total_spent:.2f} of your ₹{limit.limit_amount:.2f} limit in category '{category}'.\n",
+                    file=sys.stderr
+                )
+    if triggered:
+        db.session.commit()
+    return triggered
+
+
+# ---------------- SMART BUDGET ALERTS ----------------
+
+@app.route("/budget/limits", methods=["GET", "POST"])
+def budget_limits():
+    if request.method == "POST":
+        try:
+            data = request.json or {}
+            if not isinstance(data, dict):
+                raise ValidationError("Request body must be a JSON object")
+            category = validate_string(data.get("category"), "category")
+            limit_amount = validate_float(data.get("limit_amount"), "limit_amount", min_val=0.0)
+            
+            limit = BudgetLimit.query.filter_by(category=category).first()
+            if limit:
+                limit.limit_amount = limit_amount
+            else:
+                limit = BudgetLimit(category=category, limit_amount=limit_amount)
+                db.session.add(limit)
+            db.session.commit()
+            return jsonify({"status": "success"})
+        except ValidationError as e:
+            raise e
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+    else:
+        limits = BudgetLimit.query.order_by(BudgetLimit.category).all()
+        return jsonify([l.to_dict() for l in limits])
+
+@app.route("/budget/status", methods=["GET"])
+def budget_status():
+    import datetime
+    year_month = request.args.get("month", datetime.datetime.now().strftime("%Y-%m"))
+    
+    limits = BudgetLimit.query.all()
+    limits_dict = {l.category: l.limit_amount for l in limits}
+    
+    expenses = Expense.query.filter(Expense.date.like(f"{year_month}%")).all()
+    
+    spent_by_category = {}
+    for e in expenses:
+        spent_by_category[e.category] = spent_by_category.get(e.category, 0.0) + e.amount
+        
+    status_list = []
+    all_categories = set(limits_dict.keys()) | set(spent_by_category.keys())
+    
+    for cat in sorted(all_categories):
+        lim = limits_dict.get(cat, 0.0)
+        spent = spent_by_category.get(cat, 0.0)
+        pct = (spent / lim * 100) if lim > 0 else 0.0
+        status_list.append({
+            "category": cat,
+            "limit_amount": lim,
+            "spent": spent,
+            "percentage": round(pct, 2)
+        })
+        
+    return jsonify({
+        "month": year_month,
+        "categories": status_list,
+        "total_budgeted": sum(limits_dict.values()),
+        "total_spent": sum(spent_by_category.values())
+    })
+
+@app.route("/budget/alerts", methods=["GET"])
+def budget_alerts():
+    alerts = BudgetAlert.query.order_by(BudgetAlert.triggered_at.desc()).limit(10).all()
+    return jsonify([a.to_dict() for a in alerts])
+
+
+# ---------------- SCHEDULER ----------------
+from apscheduler.schedulers.background import BackgroundScheduler
+
+def check_all_budgets_job():
+    with app.app_context():
+        import datetime
+        ym = datetime.datetime.now().strftime("%Y-%m")
+        limits = BudgetLimit.query.all()
+        for limit in limits:
+            run_threshold_checks(limit.category, ym)
+
+if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(check_all_budgets_job, 'interval', days=1)
+    scheduler.start()
+
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
