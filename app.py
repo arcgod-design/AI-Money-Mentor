@@ -519,6 +519,23 @@ def budget_alerts():
     return jsonify([a.to_dict() for a in alerts])
 
 
+# Delete a budget limit by ID (Issue #179)
+@app.route("/budget/limits/<int:limit_id>", methods=["DELETE"])
+def delete_budget_limit(limit_id):
+    """Remove a category budget limit and its associated alerts."""
+    try:
+        limit = db.session.get(BudgetLimit, limit_id)
+        if not limit:
+            return jsonify({"error": f"Budget limit with id {limit_id} not found."}), 404
+        # Remove any alerts tied to this category before deleting the limit
+        BudgetAlert.query.filter_by(category=limit.category).delete(synchronize_session="fetch")
+        db.session.delete(limit)
+        db.session.commit()
+        return jsonify({"status": "success", "deleted_category": limit.category})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # ---------------- SCHEDULER ----------------
 from apscheduler.schedulers.background import BackgroundScheduler
 
