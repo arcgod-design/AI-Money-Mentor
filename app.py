@@ -29,6 +29,7 @@ from utils.money_score import calculate_money_score
 from utils.multi_agent import run_multi_agent
 from utils.stock import get_stock_price
 from utils.expense_track import calculate_expense, insights
+from utils.validation import ValidationError, validate_string, validate_float, validate_int
 
 app = Flask(__name__)
 
@@ -62,6 +63,15 @@ def health_check():
 
 
 # ---------------- ERROR HANDLERS ----------------
+@app.errorhandler(ValidationError)
+def handle_validation_error(error):
+    return jsonify({
+        "error": "Bad Request",
+        "message": str(error),
+        "status_code": 400
+    }), 400
+
+
 @app.errorhandler(400)
 def bad_request(error):
     return jsonify({
@@ -102,9 +112,13 @@ def internal_server_error(error):
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        data = request.json
-        msg = data.get("message")
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        msg = validate_string(data.get("message"), "message")
         history = data.get("history", [])
+        if not isinstance(history, list):
+            raise ValidationError("'history' must be a list")
 
         # Build messages: system prompt + last 10 history turns + current message
         messages = [{"role": "system", "content": "You are a financial advisor for India."}]
@@ -112,18 +126,12 @@ def chat():
         messages.append({"role": "user", "content": msg})
 
         res = client.chat.completions.create(
-
-    model="llama-3.1-8b-instant",
-    messages=[
-        {
-            "role": "system",
-            "content": """
-You are an expert AI financial advisor for Indian users.
-
             model="llama-3.1-8b-instant",
-            messages=messages
-        )
-
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+You are an expert AI financial advisor for Indian users.
 
 Your job:
 - Help users manage money smartly
@@ -148,14 +156,16 @@ Advice:
 Tone:
 - Friendly, practical, and easy to understand
 """
-        },
-        {"role": "user", "content": msg}
-    ]
-)
+                },
+                {"role": "user", "content": msg}
+            ]
+        )
         return jsonify({
             "reply": res.choices[0].message.content
         })
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
         app.logger.error(f"Groq API Error: {str(e)}")
 
@@ -168,13 +178,15 @@ Tone:
 @app.route("/sip", methods=["POST"])
 def sip():
     try:
-        data = request.json
-        result = calculate_sip(
-            float(data["monthly"]),
-            float(data["rate"]),
-            int(data["years"]),
-            float(data.get("inflation", 0.0))
-        )
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        monthly = validate_float(data.get("monthly"), "monthly", min_val=0.0)
+        rate = validate_float(data.get("rate"), "rate", min_val=0.0)
+        years = validate_int(data.get("years"), "years", min_val=1)
+        inflation = validate_float(data.get("inflation", 0.0), "inflation", min_val=0.0)
+        
+        result = calculate_sip(monthly, rate, years, inflation)
         return jsonify({
             "future_value": result["nominal_value"],
             "nominal_value": result["nominal_value"],
@@ -182,30 +194,41 @@ def sip():
             "inflation_applied": result["inflation_applied"]
         })
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 400
 
 
 # ---------------- 📊 STOCK ----------------
 @app.route("/portfolio", methods=["POST"])
 def portfolio():
     try:
-        stock = request.json["stock"].upper()
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        stock = validate_string(data.get("stock"), "stock").upper()
         result = get_stock_price(stock)
+        if "error" in result:
+            raise ValidationError(result["error"])
         return jsonify(result)
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 400
     
 # ---------------- 💸 TAX ----------------
 @app.route("/tax", methods=["POST"])
 def tax():
     try:
-        data = request.json
-        income = float(data["income"])
-        deduction_80c = float(data.get("deduction_80c", 0.0))
-        deduction_80d = float(data.get("deduction_80d", 0.0))
-        deduction_hra = float(data.get("deduction_hra", 0.0))
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        income = validate_float(data.get("income"), "income", min_val=0.0)
+        deduction_80c = validate_float(data.get("deduction_80c", 0.0), "deduction_80c", min_val=0.0)
+        deduction_80d = validate_float(data.get("deduction_80d", 0.0), "deduction_80d", min_val=0.0)
+        deduction_hra = validate_float(data.get("deduction_hra", 0.0), "deduction_hra", min_val=0.0)
         
         result = calculate_tax(
             income,
@@ -215,8 +238,10 @@ def tax():
         )
         return jsonify({"tax": result})
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 400
 
 
 # ---------------- 📄 PDF ----------------
@@ -228,35 +253,42 @@ def upload():
         return jsonify({"data": result})
 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 400
 
 
 # ---------------- 🧠 MULTI AGENT ----------------
 @app.route("/agent", methods=["POST"])
 def run_agent_route():
     try:
-        query = request.json["query"]
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        query = validate_string(data.get("query"), "query")
         response = run_multi_agent(client, query)
         return jsonify({"response": response})
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 400
 
 
 # ---------------- 💰 MONEY SCORE ----------------
 @app.route("/money-score", methods=["POST"])
 def money_score():
     try:
-        data = request.json
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        
+        income = validate_float(data.get("income"), "income", min_val=0.0)
+        expenses = validate_float(data.get("expenses"), "expenses", min_val=0.0)
+        savings = validate_float(data.get("savings"), "savings", min_val=0.0)
+        investments = validate_float(data.get("investments"), "investments", min_val=0.0)
+        debt = validate_float(data.get("debt"), "debt", min_val=0.0)
+        emergency = validate_float(data.get("emergency"), "emergency", min_val=0.0)
 
-        score = calculate_money_score(
-            float(data["income"]),
-            float(data["expenses"]),
-            float(data["savings"]),
-            float(data["investments"]),
-            float(data["debt"]),
-            float(data["emergency"])
-        )
+        score = calculate_money_score(income, expenses, savings, investments, debt, emergency)
 
         if score >= 80:
             status = "Excellent 💚"
@@ -272,8 +304,10 @@ def money_score():
             "status": status
         })
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 400
 
 
 # Expense Tracker Features
@@ -281,16 +315,24 @@ def money_score():
 @app.route("/add_expense", methods=["POST"])
 def add_expense():
     try:
-        data = request.json
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        category = validate_string(data.get("category"), "category")
+        amount = validate_float(data.get("amount"), "amount", min_val=0.01)
+        date = validate_string(data.get("date"), "date")
+        
         expense = Expense(
-            category=data["category"],
-            amount=float(data["amount"]),
-            date=data["date"]
+            category=category,
+            amount=amount,
+            date=date
         )
         db.session.add(expense)
         db.session.commit()
         return jsonify({"status": "success"})
 
+    except ValidationError as e:
+        raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -304,7 +346,7 @@ def calculate():
 @app.route("/insights", methods=["GET"])
 def expense_insights():
     expense_data = [e.to_dict() for e in Expense.query.order_by(Expense.id).all()]
-    result =insights(client,expense_data)
+    result = insights(client, expense_data)
     return jsonify(result)
 
 # ---------------- NET WORTH TRACKER ----------------
@@ -329,56 +371,69 @@ def get_net_worth():
 @app.route("/add-asset", methods=["POST"])
 def add_asset():
     try:
-        data = request.json
-        asset = Asset(name=data["name"], amount=float(data["amount"]))
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        name = validate_string(data.get("name"), "name")
+        amount = validate_float(data.get("amount"), "amount", min_val=0.0)
+        
+        asset = Asset(name=name, amount=amount)
         db.session.add(asset)
         db.session.commit()
         return jsonify({"status": "success"})
+    except ValidationError as e:
+        raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
 @app.route("/add-liability", methods=["POST"])
 def add_liability():
     try:
-        data = request.json
-        liability = Liability(name=data["name"], amount=float(data["amount"]))
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        name = validate_string(data.get("name"), "name")
+        amount = validate_float(data.get("amount"), "amount", min_val=0.0)
+        
+        liability = Liability(name=name, amount=amount)
         db.session.add(liability)
         db.session.commit()
         return jsonify({"status": "success"})
+    except ValidationError as e:
+        raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
 @app.route("/delete-item", methods=["POST"])
 def delete_item():
     try:
-        data = request.json
-        item_type = data["type"] # 'asset' or 'liability'
-        item_id = int(data["id"]) # positional index from the frontend
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        item_type = validate_string(data.get("type"), "type")
+        if item_type not in ('asset', 'liability'):
+            raise ValidationError("'type' must be either 'asset' or 'liability'")
+        item_id = validate_int(data.get("id"), "id", min_val=0)
 
         if item_type == 'asset':
             rows = Asset.query.order_by(Asset.id).all()
+            if item_id >= len(rows):
+                raise ValidationError("Invalid asset ID")
             db.session.delete(rows[item_id])
         else:
             rows = Liability.query.order_by(Liability.id).all()
+            if item_id >= len(rows):
+                raise ValidationError("Invalid liability ID")
             db.session.delete(rows[item_id])
 
         db.session.commit()
         return jsonify({"status": "success"})
+    except ValidationError as e:
+        raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "False").lower() in ("true", "1", "yes")
-
     app.run(debug=debug_mode)
-from flask import Flask, render_template
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return render_template("index.html")
-
-    app.run(debug=debug_mode)
-
