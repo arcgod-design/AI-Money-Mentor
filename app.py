@@ -34,7 +34,7 @@ from utils.validation import ValidationError, validate_string, validate_float, v
 app = Flask(__name__)
 
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, FinancialGoal
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -705,6 +705,114 @@ def delete_budget_limit(limit_id):
         db.session.delete(limit)
         db.session.commit()
         return jsonify({"status": "success", "deleted_category": limit.category})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ---------------- FINANCIAL GOALS TRACKER ----------------
+@app.route("/goals", methods=["GET", "POST"])
+def goals():
+    if request.method == "GET":
+        return render_template("goals.html", active_page="goals")
+    try:
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+        name = validate_string(data.get("name"), "name")
+        target_amount = validate_float(data.get("target_amount"), "target_amount", min_val=0.01)
+        current_amount = validate_float(data.get("current_amount", 0.0), "current_amount", min_val=0.0)
+        target_date = validate_string(data.get("target_date"), "target_date")
+
+        goal = FinancialGoal(
+            name=name,
+            target_amount=target_amount,
+            current_amount=current_amount,
+            target_date=target_date
+        )
+        db.session.add(goal)
+        db.session.commit()
+        return jsonify({"status": "success", "goal": goal.to_dict()})
+    except ValidationError as e:
+        raise e
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/goals/<int:goal_id>", methods=["PUT", "DELETE"])
+def goal_detail(goal_id):
+    try:
+        goal = FinancialGoal.query.get(goal_id)
+        if not goal:
+            return jsonify({"error": "Goal not found"}), 404
+
+        if request.method == "DELETE":
+            db.session.delete(goal)
+            db.session.commit()
+            return jsonify({"status": "success"})
+        else:  # PUT
+            data = request.json or {}
+            if not isinstance(data, dict):
+                raise ValidationError("Request body must be a JSON object")
+            if "name" in data:
+                goal.name = validate_string(data["name"], "name")
+            if "target_amount" in data:
+                goal.target_amount = validate_float(data["target_amount"], "target_amount", min_val=0.01)
+            if "current_amount" in data:
+                goal.current_amount = validate_float(data["current_amount"], "current_amount", min_val=0.0)
+            if "target_date" in data:
+                goal.target_date = validate_string(data["target_date"], "target_date")
+            db.session.commit()
+            return jsonify({"status": "success", "goal": goal.to_dict()})
+    except ValidationError as e:
+        raise e
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/goals", methods=["GET"])
+def get_goals():
+    try:
+        goals = FinancialGoal.query.order_by(FinancialGoal.created_at.desc()).all()
+        goals_list = [g.to_dict() for g in goals]
+
+        # Add AI recommendations if available
+        ai_recommendations = {}
+        if client and len(goals_list) > 0:
+            for goal in goals_list:
+                remaining = goal["target_amount"] - goal["current_amount"]
+                if remaining > 0:
+                    try:
+                        # Calculate monthly savings needed
+                        from datetime import datetime
+                        target_dt = datetime.strptime(goal["target_date"], "%Y-%m")
+                        now = datetime.now()
+                        months_remaining = (target_dt.year - now.year) * 12 + (target_dt.month - now.month)
+                        if months_remaining <= 0:
+                            months_remaining = 1
+
+                        monthly_needed = remaining / months_remaining
+                        prompt = (
+                            f"Goal: {goal['name']}\n"
+                            f"Target amount: ₹{goal['target_amount']:,}\n"
+                            f"Current saved: ₹{goal['current_amount']:,}\n"
+                            f"Remaining: ₹{remaining:,}\n"
+                            f"Months remaining: {months_remaining}\n"
+                            f"Required monthly savings: ₹{monthly_needed:,.2f}\n\n"
+                            f"Give 3-4 practical, actionable tips to reach this financial goal faster in India. Keep it concise."
+                        )
+                        res = client.chat.completions.create(
+                            model="llama-3.1-8b-instant",
+                            messages=[
+                                {"role": "system", "content": "You are a helpful Indian personal finance advisor."},
+                                {"role": "user", "content": prompt}
+                            ]
+                        )
+                        ai_recommendations[goal["id"]] = res.choices[0].message.content.strip()
+                    except Exception as ai_err:
+                        app.logger.error(f"Goal AI Recommendation Error: {str(ai_err)}")
+                        ai_recommendations[goal["id"]] = "AI recommendations unavailable."
+
+        return jsonify({"goals": goals_list, "ai_recommendations": ai_recommendations})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 

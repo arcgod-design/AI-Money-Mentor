@@ -149,3 +149,25 @@ class BudgetAlert(db.Model):
             "threshold": self.threshold,
             "triggered_at": self.triggered_at.isoformat()
         }
+
+
+class FinancialGoal(db.Model):
+    __tablename__ = "financial_goals"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    target_amount = db.Column(db.Float, nullable=False)
+    current_amount = db.Column(db.Float, nullable=False, default=0.0)
+    target_date = db.Column(db.String(10), nullable=False)  # YYYY-MM
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        progress_percent = (self.current_amount / self.target_amount * 100) if self.target_amount > 0 else 0
+        return {
+            "id": self.id,
+            "name": self.name,
+            "target_amount": self.target_amount,
+            "current_amount": self.current_amount,
+            "progress_percent": round(progress_percent, 2),
+            "target_date": self.target_date,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
