@@ -4,6 +4,17 @@ import os
 import sys
 from groq import Groq
 from dotenv import load_dotenv
+from flask_login import (
+    login_user,
+    logout_user,
+    current_user,
+    login_required
+)
+
+from werkzeug.security import (
+    generate_password_hash,
+    check_password_hash
+)
 
 # Load environment variables from .env file (if present)
 load_dotenv()
@@ -33,12 +44,24 @@ from utils.validation import ValidationError, validate_string, validate_float, v
 
 app = Flask(__name__)
 
+
+
 # ---------------- INIT DATABASE ----------------
 from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, FinancialGoal
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SECRET_KEY"] = os.getenv(
+    "SECRET_KEY",
+    "dev-secret-key"
+)
+from flask_login import LoginManager
+
+login_manager = LoginManager()
+login_manager.init_app(app)
 db.init_app(app)
+
+from models import User
 
 with app.app_context():
     db.create_all()
@@ -52,6 +75,52 @@ if os.getenv("FLASK_ENV", "development") != "production":
         print("[OK] Groq client initialised successfully.")
     else:
         print("[WARNING] Groq client is running in offline mode.")
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json or {}
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+    if not username or not password or not email:
+        return jsonify({"error": "Username, email, and password are required."}), 400
+    
+    if User.query.filter_by(username=username).first():
+        return jsonify({"error": "Username already exists."}), 400
+    
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already exists."}), 400
+
+    user = User(username=username, email=email,password_hash=generate_password_hash(password))
+    db.session.add(user)
+    db.session.commit()
+    login_user(user)
+    return jsonify({"status": "success"})
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json or {}
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+    if not username or not password or not email:
+        return jsonify({"error": "Username, email, and password are required."}), 400
+    
+    user = User.query.filter_by(username=username).first()
+    if user and check_password_hash(user.password_hash, password):
+        login_user(user)
+        return jsonify({"status": "success"})
+    return jsonify({"error": "Invalid username or password."}), 401
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    logout_user()
+    return jsonify({"status": "success"})
+
 @app.route("/")
 def home():
     return render_template("dashboard.html", active_page="dashboard")
@@ -447,6 +516,7 @@ def money_score():
 # Expense Tracker Features
 
 @app.route("/add_expense", methods=["POST"])
+@login_required
 def add_expense():
     try:
         data = request.json or {}
@@ -459,7 +529,8 @@ def add_expense():
         expense = Expense(
             category=category,
             amount=amount,
-            date=date
+            date=date,
+            user_id=current_user.id
         )
         db.session.add(expense)
         db.session.commit()

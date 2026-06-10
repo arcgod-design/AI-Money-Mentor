@@ -6,9 +6,32 @@ Flask-SQLAlchemy, so data survives server restarts.
 """
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from flask_login import UserMixin
+
 
 db = SQLAlchemy()
 
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    username = db.Column(
+        db.String(80),
+        unique=True,
+        nullable=False
+    )
+
+    email = db.Column(
+        db.String(120),
+        unique=True,
+        nullable=False
+    )
+
+    password_hash = db.Column(
+        db.String(255),
+        nullable=False
+    )
 
 class Portfolio(db.Model):
     __tablename__ = "portfolio"
@@ -66,6 +89,8 @@ class PriceAlert(db.Model):
 
 class Expense(db.Model):
     __tablename__ = "expenses"
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref="expenses")
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Float, nullable=False)
