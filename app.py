@@ -34,7 +34,7 @@ from utils.validation import ValidationError, validate_string, validate_float, v
 app = Flask(__name__)
 
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, FinancialGoal
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, FinancialGoal, RecurringExpense
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -495,6 +495,105 @@ def expense_insights():
     result = insights(client, expense_data)
     return jsonify(result)
 
+
+# ---------------- RECURRING EXPENSES ----------------
+def _validate_frequency(freq: str):
+    freq = (freq or "").strip().lower()
+    if freq not in ("monthly", "weekly", "yearly"):
+        raise ValidationError("frequency must be one of: monthly, weekly, yearly")
+    return freq
+
+
+def _get_period_key(frequency: str, d):
+    if frequency == "monthly":
+        return d.strftime("%Y-%m")
+    if frequency == "weekly":
+        iso_year, iso_week, _ = d.isocalendar()
+        return f"{iso_year}-W{iso_week:02d}"
+    # yearly
+    return d.strftime("%Y")
+
+
+@app.route("/recurring-expense", methods=["POST"])
+def create_recurring_expense():
+    """
+    Create a recurring expense template.
+    """
+    try:
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+
+        category = validate_string(data.get("category"), "category")
+        amount = validate_float(data.get("amount"), "amount", min_val=0.01)
+        start_date = validate_string(data.get("start_date"), "start_date")  # YYYY-MM-DD
+        frequency = _validate_frequency(data.get("frequency"))
+
+        active = data.get("active", True)
+        if not isinstance(active, bool):
+            raise ValidationError("active must be a boolean")
+
+        end_date = data.get("end_date", None)
+        if end_date is not None:
+            end_date = validate_string(end_date, "end_date")  # YYYY-MM-DD
+
+        # Validate date format (YYYY-MM-DD)
+        import datetime
+        try:
+            start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        except Exception:
+            raise ValidationError("start_date must be in YYYY-MM-DD format")
+
+        if end_date:
+            try:
+                end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+            except Exception:
+                raise ValidationError("end_date must be in YYYY-MM-DD format")
+            if end_dt < start_dt:
+                raise ValidationError("end_date cannot be before start_date")
+
+        rexp = RecurringExpense(
+            category=category,
+            amount=amount,
+            start_date=start_date,
+            frequency=frequency,
+            active=active,
+            end_date=end_date,
+        )
+        db.session.add(rexp)
+        db.session.commit()
+        return jsonify(rexp.to_dict()), 201
+
+    except ValidationError as e:
+        raise e
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/recurring-expense", methods=["GET"])
+def list_recurring_expenses():
+    try:
+        items = RecurringExpense.query.order_by(RecurringExpense.id.desc()).all()
+        return jsonify([i.to_dict() for i in items])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/recurring-expense/<int:recurring_id>", methods=["DELETE"])
+def disable_recurring_expense(recurring_id):
+    """
+    Disable a recurring expense template.
+    """
+    try:
+        item = db.session.get(RecurringExpense, recurring_id)
+        if not item:
+            return jsonify({"error": "Recurring expense not found"}), 404
+        item.active = False
+        db.session.commit()
+        return jsonify({"status": "success", "id": recurring_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 # ---------------- NET WORTH TRACKER ----------------
 # Net Worth Tracker Features
 
@@ -851,9 +950,55 @@ def check_stock_alerts_job():
                     )
         db.session.commit()
 
+
+def check_all_recurring_expenses_job():
+    """
+    Daily recurring-expense scheduler:
+    - For each active RecurringExpense, generate an Expense occurrence for the current period
+      (monthly/weekly/yearly).
+    - Insert Expense row only once per period (duplicate guard using Expense.merchant_name).
+    """
+    with app.app_context():
+        import datetime
+
+        today = datetime.date.today()
+        active_items = RecurringExpense.query.filter_by(active=True).all()
+
+        for rexp in active_items:
+            start_dt = datetime.datetime.strptime(rexp.start_date, "%Y-%m-%d").date()
+            if today < start_dt:
+                continue
+
+            if rexp.end_date:
+                end_dt = datetime.datetime.strptime(rexp.end_date, "%Y-%m-%d").date()
+                if today > end_dt:
+                    continue
+
+            period_key = _get_period_key(rexp.frequency, today)
+            merchant_key = f"recurring_expense:{rexp.id}:{period_key}"
+
+            # duplicate guard (same template + same period)
+            exists = Expense.query.filter_by(merchant_name=merchant_key).first()
+            if exists:
+                continue
+
+            occ_date = today.strftime("%Y-%m-%d")
+            exp = Expense(
+                category=rexp.category,
+                amount=rexp.amount,
+                date=occ_date,
+                is_recurring=True,
+                merchant_name=merchant_key,
+            )
+            db.session.add(exp)
+
+        db.session.commit()
+
+
 if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_all_budgets_job, 'interval', days=1)
+    scheduler.add_job(check_all_recurring_expenses_job, 'interval', days=1)
     scheduler.add_job(check_stock_alerts_job, 'interval', minutes=10)
     scheduler.start()
 
