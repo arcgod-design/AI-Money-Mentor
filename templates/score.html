@@ -116,7 +116,12 @@
         const investScore = investRateVal >= 0.2 ? 25 : investRateVal >= 0.1 ? 15 : 5;
 
         const debtRatioVal = income>0? parseFloat(debt) / parseFloat(income):0;
-        const debtScore = income>0? (debtRatioVal <= 0.2 ? 25 : debtRatioVal <= 0.4 ? 15) : 5;
+        let debtScore=25;
+        if (income>0){
+          debtScore = debtRatioVal <= 0.2 ? 25:debtRatioVal<=0.4?15 : 5;
+        }else if(income==0 && debt==0){
+          debtScore=25;
+        }
 
         const monthsCoverVal = expenses>0? parseFloat(emergency) / parseFloat(expenses):0;
         const emergencyScore = monthsCoverVal >= 6 ? 20 : monthsCoverVal >= 3 ? 10 : 5;
