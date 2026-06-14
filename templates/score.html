@@ -39,7 +39,6 @@
 {% block scripts %}
 <script>
   let scoreChartInstance = null;
-  let lastReportData = null;
 
   async function calcScore() {
     const incomeRaw = document.getElementById('s_income').value;
@@ -113,16 +112,13 @@
           </div>
         `);
 
-        lastReportData = {
+        updateReportData({
           income, expenses, savings,
           investments: invest,
           debt, emergency,
-          money_score: `${data.score} (${data.status})`,
-          tax: 'N/A',
-          sip_projection: 'N/A'
-        };
-        const exportSection = document.getElementById('export-section');
-        if (exportSection) exportSection.style.display = 'flex';
+          money_score: `${data.score} (${data.status})`
+        });
+        showExportSection();
 
         // Compute sub-scores locally for visual rendering
         const savingsRateVal = income>0? parseFloat(savings) / parseFloat(income):0;
@@ -198,33 +194,8 @@
       scoreChartInstance.destroy();
       scoreChartInstance = null;
     }
-    lastReportData = null;
     const exportSection = document.getElementById('export-section');
     if (exportSection) exportSection.style.display = 'none';
-  }
-
-  async function exportReport(format) {
-    if (!lastReportData) return;
-    try {
-      const response = await fetch(`/export/${format}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lastReportData)
-      });
-      if (!response.ok) throw new Error('Export failed');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `financial_report.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      showResult('scoreResult', '⚠ Could not export report.');
-    }
   }
 </script>
 {% endblock %}
