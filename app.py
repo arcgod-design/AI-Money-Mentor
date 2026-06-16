@@ -732,7 +732,7 @@ def add_expense():
         
         # Check thresholds
         ym = expense.date[:7] if len(expense.date) >= 7 else None
-        run_threshold_checks(expense.category, ym)
+        run_threshold_checks(expense.user_id, expense.category, ym)
         
         return jsonify({"status": "success"})
 
@@ -757,7 +757,7 @@ def expense_detail(expense_id):
             db.session.commit()
             
             if ym:
-                run_threshold_checks(category, ym)
+                run_threshold_checks(expense.user_id, category, ym)
                 
             return jsonify({"status": "success"})
         else:  # PUT
@@ -781,7 +781,7 @@ def expense_detail(expense_id):
             
             ym = expense.date[:7] if len(expense.date) >= 7 else None
             if ym:
-                run_threshold_checks(expense.category, ym)
+                run_threshold_checks(expense.user_id, expense.category, ym)
                 
             return jsonify({"status": "success", "expense": expense.to_dict()})
     except ValidationError as e:
@@ -870,6 +870,7 @@ def create_recurring_expense():
                 raise ValidationError("end_date cannot be before start_date")
 
         rexp = RecurringExpense(
+            user_id=current_user.id,
             category=category,
             amount=amount,
             start_date=start_date,
@@ -891,7 +892,7 @@ def create_recurring_expense():
 @login_required
 def list_recurring_expenses():
     try:
-        items = RecurringExpense.query.order_by(RecurringExpense.id.desc()).all()
+        items = RecurringExpense.query.filter_by(user_id=current_user.id).order_by(RecurringExpense.id.desc()).all()
         return jsonify([i.to_dict() for i in items])
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -904,9 +905,11 @@ def disable_recurring_expense(recurring_id):
     Disable a recurring expense template.
     """
     try:
-        item = db.session.get(RecurringExpense, recurring_id)
+        item = RecurringExpense.query.filter_by(id=recurring_id, user_id=current_user.id).first()
         if not item:
             return jsonify({"error": "Recurring expense not found"}), 404
+        if item.user_id != current_user.id:
+            return jsonify({"error": "Unauthorized"}), 403
         item.active = False
         db.session.commit()
         return jsonify({"status": "success", "id": recurring_id})
@@ -1016,17 +1019,17 @@ def delete_item():
         return jsonify({"error": str(e)}), 400
 
 # Helper to check budget thresholds
-def run_threshold_checks(category, year_month=None):
+def run_threshold_checks(user_id, category, year_month=None):
     if not year_month:
         import datetime
         year_month = datetime.datetime.now().strftime("%Y-%m")
         
-    limit = BudgetLimit.query.filter_by(category=category).first()
+    limit = BudgetLimit.query.filter_by(user_id=user_id, category=category).first()
     if not limit or limit.limit_amount <= 0:
         return []
         
     expenses = Expense.query.filter(
-        Expense.user_id == current_user.id,
+        Expense.user_id == user_id,
         Expense.category == category,
         Expense.date.like(f"{year_month}%")
     ).all()
@@ -1039,6 +1042,7 @@ def run_threshold_checks(category, year_month=None):
         target = threshold / 100.0
         if pct >= target:
             exists = BudgetAlert.query.filter_by(
+                user_id=user_id,
                 category=category,
                 year_month=year_month,
                 threshold=threshold
@@ -1048,6 +1052,7 @@ def run_threshold_checks(category, year_month=None):
                 alert.category = category
                 alert.year_month = year_month
                 alert.threshold = threshold
+                alert.user_id = user_id
                 db.session.add(alert)
                 triggered.append(threshold)
                 print(
@@ -1074,7 +1079,7 @@ def budget_limits():
             category = validate_string(data.get("category"), "category")
             limit_amount = validate_float(data.get("limit_amount"), "limit_amount", min_val=0.0)
             
-            limit = BudgetLimit.query.filter_by(category=category).first()
+            limit = BudgetLimit.query.filter_by(user_id=current_user.id, category=category).first()
             if limit:
                 limit.limit_amount = limit_amount
             else:
@@ -1363,7 +1368,7 @@ def check_all_budgets_job():
         ym = datetime.datetime.now().strftime("%Y-%m")
         limits = BudgetLimit.query.all()
         for limit in limits:
-            run_threshold_checks(limit.category, ym)
+            run_threshold_checks(limit.user_id, limit.category, ym)
 
 def check_stock_alerts_job():
     """
@@ -1469,6 +1474,7 @@ def check_all_recurring_expenses_job():
 
             occ_date = today.strftime("%Y-%m-%d")
             exp = Expense(
+                user_id=rexp.user_id,
                 category=rexp.category,
                 amount=rexp.amount,
                 date=occ_date,

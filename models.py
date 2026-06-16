@@ -273,7 +273,8 @@ class FinancialGoalMilestone(db.Model):
 
 class RecurringExpense(db.Model):
     __tablename__ = "recurring_expenses"
-
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref="recurring_expenses")
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Float, nullable=False)
