@@ -52,7 +52,7 @@ app = Flask(__name__)
 
 
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, FinancialGoalMilestone
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, FinancialGoalMilestone, Portfolio
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -162,6 +162,105 @@ def health_check():
     """Lightweight liveness probe for deployment environments (Docker, Railway, etc.)."""
     return jsonify({"status": "ok", "service": "AI Money Mentor"}), 200
 
+@app.route("/dashboard-data")
+@login_required
+def dashboard_data():
+    """API endpoint to fetch all data needed for populating the dashboard in one call."""
+    try:
+        net_worth = sum(a.amount for a in Asset.query.filter_by(user_id=current_user.id).all()) - sum(l.amount for l in Liability.query.filter_by(user_id=current_user.id).all())
+        monthly_expenses = [e.to_dict() for e in Expense.query.filter_by(user_id=current_user.id).order_by(Expense.id.desc()).limit(10).all()]
+        budget_alert_count = len([b for b in BudgetAlert.query.filter_by(user_id=current_user.id).all()])
+        goal_count = len([g for g in FinancialGoal.query.filter_by(user_id=current_user.id).all()])
+        portfolio_items = Portfolio.query.filter_by(user_id=current_user.id).all()
+
+        allocation = {}
+
+        for item in portfolio_items:
+            value = item.quantity * item.buy_price
+
+            allocation[item.investment_type] = (
+                allocation.get(item.investment_type, 0) + value
+            )
+
+        total = sum(allocation.values())
+
+        allocation_percentages = {
+            k: round(v * 100 / total, 2)
+            for k, v in allocation.items()
+        } if total > 0 else {}
+
+
+        return jsonify({
+            "net_worth": net_worth,
+            "monthly_expenses": monthly_expenses,
+            "budget_alert_count": budget_alert_count,
+            "goal_count": goal_count,
+            "portfolio_allocation": allocation_percentages,
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/dashboard/recent-activity")
+@login_required
+def recent_activity():
+    activities = []
+
+    # Latest expenses
+    expenses = (
+        Expense.query
+        .filter_by(user_id=current_user.id)
+        .order_by(Expense.id.desc())
+        .limit(5)
+        .all()
+    )
+
+    for e in expenses:
+        activities.append({
+            "type": "expense",
+            "message": f"Added expense: {e.category} ₹{e.amount}",
+            "date": e.date
+        })
+
+    # Latest assets
+    assets = (
+        Asset.query
+        .filter_by(user_id=current_user.id)
+        .order_by(Asset.id.desc())
+        .limit(5)
+        .all()
+    )
+
+    for a in assets:
+        activities.append({
+            "type": "asset",
+            "message": f"Added asset: {a.name} ₹{a.amount}",
+            "date": a.date
+        })
+
+    # Latest goals
+    goals = (
+        FinancialGoal.query
+        .filter_by(user_id=current_user.id)
+        .order_by(FinancialGoal.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    for g in goals:
+        activities.append({
+            "type": "goal",
+            "message": f"Created goal: {g.name}",
+            "date": g.created_at.isoformat()
+        })
+
+    activities = sorted(
+        activities,
+        key=lambda x: x["date"],
+        reverse=True
+    )
+
+    return jsonify(activities[:10])
 
 # ---------------- AI STATUS (Issue #218) ----------------
 @app.route("/api/status", methods=["GET"])
