@@ -1578,6 +1578,7 @@
     <div class="nav-item" data-page="expense"><span class="icon">💲</span>Expense Track</div>
     <div class="nav-item" data-page="networth"><span class="icon">💎</span> Net Worth</div>
     <div class="nav-item" data-page="settings"><span class="icon">⚙️</span> Settings</div>
+    <div class="nav-item" data-page="recurring"><span class="icon">🔄</span> Recurring</div>
   </div>
 
   <!-- ══════════ MAIN ══════════ -->
@@ -1928,24 +1929,31 @@
         <div id="agentResult" class="result-box"></div>
       </div>
     </div>
-
-    <!---------- EXPENSE TRACK------------------->
-    <div id="expense" class="page">
-      <div class="page-title">💲 Expense Track and Insights</div>
-      <form id="expenseForm">
-        <select id="category" required>
-          <option value="">Select Category</option>
-          <option value="Food">Food</option>
-          <option value="Rent">Rent</option>
-          <option value="Travel">Travel</option>
-          <option value="Shopping">Shopping</option>
-          <option value="Other">Other</option>
-        </select>
-        <input type="number" required min="0" id="amount" placeholder="Amount (₹)" required>
-        <input type="date" id="date" required>
-        <button type="submit">Add Expense</button>
-      </form>
-
+<!---------- EXPENSE TRACK------------------->
+<div id="expense" class="page">
+  <div class="page-title">💲 Expense Track and Insights</div>
+  <form id="expenseForm">
+    <select id="category" required>
+      <option value="">Select Category</option>
+      <option value="Food">Food</option>
+      <option value="Rent">Rent</option>
+      <option value="Travel">Travel</option>
+      <option value="Shopping">Shopping</option>
+      <option value="Other">Other</option>
+    </select>
+    
+    <!-- Amount with Microphone Button -->
+    <div style="display: flex; gap: 8px; flex: 1; min-width: 150px;">
+      <input type="number" required min="0" id="amount" placeholder="Amount (₹)" style="flex: 1;">
+      <button type="button" id="voiceBtn" class="btn btn-gold" style="padding: 10px 14px; min-width: 50px; border-radius: 14px;" title="Speak expense">
+        🎤
+      </button>
+    </div>
+    
+    <input type="text" id="merchant" placeholder="Merchant (optional)">
+    <input type="date" id="date" required>
+    <button type="submit">Add Expense</button>
+  </form>
       <div class="cards">
         <div class="card" id="totalCard">
           <h2>Total Spend</h2>
@@ -1957,14 +1965,14 @@
 
       <h2>Expense History</h2>
       <table id="expenseTable" style="width: 90%; margin: 20px; border-collapse: collapse; text-align: center;">
-        <thead>
-          <tr>
-            <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Date</th>
-            <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Category
-            </th>
-            <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Amount</th>
-          </tr>
-        </thead>
+       <thead>
+  <tr>
+    <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Date</th>
+    <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Category</th>
+    <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Merchant</th>
+    <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Amount</th>
+  </tr>
+</thead>
         <tbody id="expenseTableBody"></tbody>
       </table>
 
@@ -3257,6 +3265,264 @@ Add Savings
         window.addEventListener("load", () => applyChartTheme(true));
       }
     })();
+
+
+
+                   </script>
+
+ <script>
+
+async function chatSend() {
+
+    const input = document.getElementById("chatInput");
+    const messages = document.getElementById("chatMessages");
+    const welcome = document.getElementById("chatPageWelcome");
+
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    welcome?.classList.add("hidden");
+
+    messages.innerHTML += `
+        <div class="msg user">
+            <div class="sender">YOU</div>
+            ${text}
+        </div>
+    `;
+
+    input.value = "";
+
+    try {
+
+        const res = await fetch("http://127.0.0.1:5000/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: text
+            })
+        });
+
+        const data = await res.json();
+
+        messages.innerHTML += `
+            <div class="msg bot">
+                <div class="sender">AI</div>
+                ${data.reply}
+            </div>
+        `;
+
+    } catch (err) {
+
+        messages.innerHTML += `
+            <div class="msg bot">
+                <div class="sender">AI</div>
+                Backend not connected. /chat endpoint missing.
+            </div>
+        `;
+
+        console.log(err);
+    }
+
+    messages.scrollTop = messages.scrollHeight;
+}
+
+function chatQuick(text){
+
+    document.getElementById(
+        "chatInput"
+    ).value = text;
+
+    chatSend();
+}
+
+/* ══════════════════════════════════════════════
+   VOICE-ENABLED EXPENSE INPUT
+══════════════════════════════════════════════ */
+
+// Check if browser supports Speech Recognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+    console.log("✅ Speech Recognition is supported in this browser");
+} else {
+    console.warn("⚠️ Speech Recognition is NOT supported in this browser");
+}
+
+let isListening = false;
+let recognition = null;
+
+function initVoiceRecognition() {
+    if (!SpeechRecognition) {
+        alert("❌ Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.");
+        return null;
+    }
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    
+    return recognition;
+}
+
+function startVoiceInput() {
+    const voiceBtn = document.getElementById('voiceBtn');
+    
+    if (isListening) {
+        stopVoiceInput();
+        return;
+    }
+    
+    recognition = initVoiceRecognition();
+    if (!recognition) return;
+    
+    isListening = true;
+    voiceBtn.innerHTML = '⏹️';
+    voiceBtn.style.background = 'linear-gradient(135deg, #e05252, #c0392b)';
+    voiceBtn.title = 'Stop listening';
+    
+    const amountInput = document.getElementById('amount');
+    amountInput.placeholder = '🎤 Listening...';
+    amountInput.style.borderColor = '#d4a843';
+    
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        console.log('🎤 Transcript:', transcript);
+        amountInput.placeholder = `🗣️ "${transcript}"`;
+        
+        if (event.results[0].isFinal) {
+            parseVoiceText(transcript);
+            stopVoiceInput();
+        }
+    };
+    
+    recognition.onerror = function(event) {
+        console.error('🎤 Error:', event.error);
+        let errorMsg = '🎤 Error: ';
+        switch(event.error) {
+            case 'not-allowed':
+                errorMsg += 'Microphone permission denied. Please allow microphone access.';
+                break;
+            case 'no-speech':
+                errorMsg += 'No speech detected. Please try again.';
+                break;
+            case 'audio-capture':
+                errorMsg += 'No microphone found. Please connect a microphone.';
+                break;
+            default:
+                errorMsg += event.error;
+        }
+        amountInput.placeholder = errorMsg;
+        stopVoiceInput();
+    };
+    
+    recognition.onend = function() {
+        if (isListening) {
+            stopVoiceInput();
+        }
+    };
+    
+    try {
+        recognition.start();
+    } catch (e) {
+        console.error('🎤 Error starting:', e);
+        stopVoiceInput();
+    }
+}
+
+function stopVoiceInput() {
+    if (recognition) {
+        try {
+            recognition.stop();
+        } catch (e) {}
+    }
+    
+    isListening = false;
+    const voiceBtn = document.getElementById('voiceBtn');
+    voiceBtn.innerHTML = '🎤';
+    voiceBtn.style.background = '';
+    voiceBtn.title = 'Speak expense';
+    
+    const amountInput = document.getElementById('amount');
+    if (amountInput.placeholder === '🎤 Listening...' || amountInput.placeholder.includes('🗣️')) {
+        amountInput.placeholder = 'Amount (₹)';
+    }
+    amountInput.style.borderColor = '';
+}
+
+async function parseVoiceText(text) {
+    try {
+        const response = await fetch('/api/parse-expense-text', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: text })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.amount) {
+                document.getElementById('amount').value = data.amount;
+            }
+            if (data.category) {
+                document.getElementById('category').value = data.category;
+            }
+            if (data.merchant) {
+                document.getElementById('merchant').value = data.merchant;
+            }
+            
+            highlightField('amount');
+            if (data.category) highlightField('category');
+            if (data.merchant) highlightField('merchant');
+            
+            const amountInput = document.getElementById('amount');
+            amountInput.placeholder = '✅ Voice input processed!';
+            setTimeout(() => {
+                amountInput.placeholder = 'Amount (₹)';
+            }, 2000);
+            
+        } else {
+            document.getElementById('merchant').value = text;
+            alert(`🎤 Could not parse: "${text}". Please fill manually.`);
+        }
+    } catch (error) {
+        console.error('🎤 Parse error:', error);
+        document.getElementById('merchant').value = text;
+        alert('🎤 Could not connect to server. Please fill manually.');
+    }
+}
+
+function highlightField(fieldId) {
+    const field = document.getElementById(fieldId);
+    const originalBg = field.style.background;
+    const originalBorder = field.style.borderColor;
+    
+    field.style.background = 'rgba(46, 204, 138, 0.15)';
+    field.style.borderColor = '#2ecc8a';
+    field.style.transition = 'all 0.5s ease';
+    
+    setTimeout(() => {
+        field.style.background = originalBg || '';
+        field.style.borderColor = originalBorder || '';
+    }, 2000);
+}
+
+// Add event listener to voice button
+document.addEventListener('DOMContentLoaded', function() {
+    const voiceBtn = document.getElementById('voiceBtn');
+    if (voiceBtn) {
+        voiceBtn.addEventListener('click', startVoiceInput);
+    }
+});
+</script>
+
+
   </script>
 </body>
 

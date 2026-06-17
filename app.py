@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_mail import Mail, Message
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import sqlite3
 import atexit
 
@@ -57,8 +57,8 @@ app = Flask(__name__)
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('EMAIL_USER', 'your-email@gmail.com')  # Change this
-app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASS', 'your-app-password')     # Change this
+app.config['MAIL_USERNAME'] = os.getenv('EMAIL_USER', 'your-email@gmail.com')
+app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASS', 'your-app-password')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_USER', 'your-email@gmail.com')
 
 mail = Mail(app)
@@ -98,8 +98,6 @@ init_email_db()
 # ============================================
 def generate_weekly_report(user_email):
     """Generate weekly financial report for a user"""
-    # For now, return sample data
-    # In production, fetch from database
     return {
         'date': datetime.now().strftime('%B %d, %Y'),
         'total_spend': '₹12,450',
@@ -157,23 +155,79 @@ def send_weekly_reports():
     print(f"✅ Sent {success}/{len(users)} weekly reports")
 
 # ============================================
-# SCHEDULER - Runs every Monday at 9:00 AM
+# RECURRING EXPENSES
 # ============================================
-scheduler = BackgroundScheduler()
-
-scheduler.add_job(
-    func=send_weekly_reports,
-    trigger=CronTrigger(day_of_week='mon', hour=9, minute=0),
-    id='weekly_email_job',
-    replace_existing=True
-)
-scheduler.start()
-
-# Shutdown scheduler on app exit
-atexit.register(lambda: scheduler.shutdown())
+def process_recurring_expenses():
+    """Process recurring expenses and add them to expense tracker"""
+    print("🔄 Processing recurring expenses...")
+    today = date.today()
+    
+    try:
+        from models import RecurringExpense, Expense
+        
+        # Get all active recurring expenses due today
+        due_expenses = RecurringExpense.query.filter(
+            RecurringExpense.is_active == True,
+            RecurringExpense.next_due_date <= today
+        ).all()
+        
+        if not due_expenses:
+            print("📭 No recurring expenses due today")
+            return
+        
+        added_count = 0
+        for recurring in due_expenses:
+            # Check if already added today (avoid duplicates)
+            existing = Expense.query.filter(
+                Expense.merchant == recurring.merchant,
+                Expense.amount == recurring.amount,
+                Expense.date == today,
+                Expense.category == recurring.category
+            ).first()
+            
+            if existing:
+                continue
+            
+            # Create expense entry
+            expense = Expense(
+                amount=recurring.amount,
+                category=recurring.category,
+                merchant=recurring.merchant or 'Recurring',
+                date=today
+            )
+            db.session.add(expense)
+            
+            # Update next due date based on frequency
+            if recurring.frequency == 'daily':
+                next_date = today + timedelta(days=1)
+            elif recurring.frequency == 'weekly':
+                next_date = today + timedelta(days=7)
+            elif recurring.frequency == 'monthly':
+                next_date = today + timedelta(days=30)
+            elif recurring.frequency == 'quarterly':
+                next_date = today + timedelta(days=90)
+            elif recurring.frequency == 'yearly':
+                next_date = today + timedelta(days=365)
+            else:
+                next_date = today + timedelta(days=30)
+            
+            recurring.next_due_date = next_date
+            recurring.last_processed = today
+            added_count += 1
+        
+        db.session.commit()
+        print(f"✅ Added {added_count} recurring expenses")
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error processing recurring expenses: {e}")
 
 # ---------------- INIT DATABASE ----------------
++
 from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense
++
+from models import db, Expense, Asset, Liability, RecurringExpense
+
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -189,6 +243,32 @@ with app.app_context():
 if os.getenv("FLASK_ENV", "development") != "production":
 
     print("[OK] Groq client initialised successfully.")
+
+# ============================================
+# SCHEDULER - Runs weekly email and recurring expenses
+# ============================================
+scheduler = BackgroundScheduler()
+
+# Weekly email job - Every Monday at 9:00 AM
+scheduler.add_job(
+    func=send_weekly_reports,
+    trigger=CronTrigger(day_of_week='mon', hour=9, minute=0),
+    id='weekly_email_job',
+    replace_existing=True
+)
+
+# Recurring expenses job - Every day at 9:00 AM
+scheduler.add_job(
+    func=process_recurring_expenses,
+    trigger=CronTrigger(hour=9, minute=0),
+    id='recurring_expense_job',
+    replace_existing=True
+)
+
+scheduler.start()
+
+# Shutdown scheduler on app exit
+atexit.register(lambda: scheduler.shutdown())
 
 # ============================================
 # ROUTES
@@ -236,6 +316,7 @@ def retirement():
     return render_template('retirement.html')
 
 # ---------------- SETTINGS ----------------
+
 @app.route('/settings')
 def settings():
     """User settings page"""
@@ -281,6 +362,9 @@ def unsubscribe():
     
     return jsonify({'success': True, 'message': 'Unsubscribed successfully'})
 
+
+
+
 # ---------------- TEST EMAIL ROUTES ----------------
 @app.route('/test-email')
 def test_email():
@@ -295,10 +379,182 @@ def force_weekly():
     send_weekly_reports()
     return "Weekly reports sent manually!"
 
+# ---------------- RECURRING EXPENSES ROUTES ----------------
+@app.route('/recurring')
+def recurring_page():
+    """Recurring Expenses Management Page"""
+    return render_template('recurring.html')
+
+@app.route('/api/recurring/detect', methods=['GET'])
+def detect_recurring_expenses():
+    """Auto-detect recurring expense patterns from last 60 days"""
+    try:
+        cutoff_date = date.today() - timedelta(days=60)
+        expenses = Expense.query.filter(
+            Expense.date >= cutoff_date
+        ).order_by(Expense.date.desc()).all()
+        
+        if not expenses:
+            return jsonify({
+                'success': True,
+                'detected': [],
+                'message': 'No expenses found in last 60 days'
+            })
+        
+        # Group by merchant and category
+        patterns = {}
+        for exp in expenses:
+            key = f"{exp.merchant or 'Unknown'}_{exp.category}"
+            if key not in patterns:
+                patterns[key] = {
+                    'merchant': exp.merchant or 'Unknown',
+                    'category': exp.category,
+                    'amounts': [],
+                    'dates': []
+                }
+            patterns[key]['amounts'].append(exp.amount)
+            patterns[key]['dates'].append(exp.date)
+        
+        # Analyze patterns
+        detected = []
+        for key, data in patterns.items():
+            if len(data['amounts']) >= 2:
+                avg_amount = sum(data['amounts']) / len(data['amounts'])
+                variation = max([abs(a - avg_amount) / avg_amount for a in data['amounts']])
+                
+                if variation <= 0.10:
+                    sorted_dates = sorted(data['dates'])
+                    if len(sorted_dates) >= 2:
+                        day_diffs = []
+                        for i in range(1, len(sorted_dates)):
+                            diff = (sorted_dates[i] - sorted_dates[i-1]).days
+                            day_diffs.append(diff)
+                        
+                        avg_diff = sum(day_diffs) / len(day_diffs)
+                        
+                        frequency = None
+                        if 28 <= avg_diff <= 31:
+                            frequency = 'monthly'
+                        elif 7 <= avg_diff <= 8:
+                            frequency = 'weekly'
+                        elif 85 <= avg_diff <= 95:
+                            frequency = 'quarterly'
+                        elif 355 <= avg_diff <= 370:
+                            frequency = 'yearly'
+                        
+                        if frequency:
+                            detected.append({
+                                'merchant': data['merchant'],
+                                'category': data['category'],
+                                'amount': round(avg_amount, 2),
+                                'frequency': frequency,
+                                'next_due': (sorted_dates[-1] + timedelta(days=round(avg_diff))).isoformat(),
+                                'confidence': 'high' if len(data['amounts']) >= 3 else 'medium'
+                            })
+        
+        return jsonify({
+            'success': True,
+            'detected': detected,
+            'count': len(detected)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recurring/add', methods=['POST'])
+def add_recurring_expense():
+    """Add a recurring expense manually or from detection"""
+    try:
+        data = request.json
+        
+        required = ['amount', 'category', 'frequency', 'start_date', 'next_due_date']
+        for field in required:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
+        
+        recurring = RecurringExpense(
+            amount=float(data['amount']),
+            category=data['category'],
+            merchant=data.get('merchant', ''),
+            frequency=data['frequency'],
+            start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
+            next_due_date=datetime.strptime(data['next_due_date'], '%Y-%m-%d').date(),
+            end_date=datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data.get('end_date') else None,
+            auto_add=data.get('auto_add', True),
+            is_active=True
+        )
+        
+        db.session.add(recurring)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Recurring expense added successfully',
+            'id': recurring.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recurring/list', methods=['GET'])
+def get_recurring_expenses():
+    """Get all active recurring expenses"""
+    try:
+        recurring = RecurringExpense.query.filter_by(is_active=True).all()
+        return jsonify({
+            'success': True,
+            'recurring': [r.to_dict() for r in recurring]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recurring/delete/<int:id>', methods=['DELETE'])
+def delete_recurring_expense(id):
+    """Delete a recurring expense"""
+    try:
+        recurring = RecurringExpense.query.get(id)
+        if not recurring:
+            return jsonify({'success': False, 'error': 'Not found'}), 404
+        
+        db.session.delete(recurring)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Deleted successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recurring/toggle/<int:id>', methods=['POST'])
+def toggle_recurring_expense(id):
+    """Toggle active status of recurring expense"""
+    try:
+        recurring = RecurringExpense.query.get(id)
+        if not recurring:
+            return jsonify({'success': False, 'error': 'Not found'}), 404
+        
+        recurring.is_active = not recurring.is_active
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'is_active': recurring.is_active,
+            'message': 'Status updated'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recurring/process-now', methods=['POST'])
+def process_recurring_now():
+    """Manually trigger recurring expense processing (for testing)"""
+    process_recurring_expenses()
+    return jsonify({'success': True, 'message': 'Recurring expenses processed'})
+
 # ---------------- HEALTH CHECK ----------------
 @app.route("/health", methods=["GET"])
 def health_check():
-    """Lightweight liveness probe for deployment environments (Docker, Railway, etc.)."""
+    """Lightweight liveness probe for deployment environments."""
     return jsonify({"status": "ok", "service": "AI Money Mentor"}), 200
 
 
@@ -904,6 +1160,7 @@ def export_pdf():
 @app.route("/add_expense", methods=["POST"])
 def add_expense():
     try:
+
         data = request.json or {}
         if not isinstance(data, dict):
             raise ValidationError("Request body must be a JSON object")
@@ -915,6 +1172,15 @@ def add_expense():
         expense.category = category
         expense.amount = amount
         expense.date = date
+
+        data = request.json
+        expense = Expense(
+            category=data["category"],
+            amount=float(data["amount"]),
+            date=data["date"],
+            merchant=data.get("merchant", "")
+        )
+
         db.session.add(expense)
         db.session.commit()
         
@@ -1200,6 +1466,81 @@ def delete_item():
         raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+
+# ---------------- VOICE EXPENSE PARSER ----------------
+@app.route('/api/parse-expense-text', methods=['POST'])
+def parse_expense_text():
+    """Parse spoken text to extract amount, category, and merchant"""
+    try:
+        data = request.json
+        text = data.get('text', '').strip()
+        
+        if not text:
+            return jsonify({'success': False, 'error': 'No text provided'}), 400
+        
+        prompt = f"""
+        You are a financial data extractor. Extract the following details from this spoken text:
+        "{text}"
+        
+        Return ONLY valid JSON in this exact format:
+        {{
+            "amount": number or null,
+            "category": string or null,
+            "merchant": string or null
+        }}
+        
+        Categories must be one of: Food, Rent, Travel, Shopping, Utilities, Entertainment, Healthcare, Other.
+        
+        Examples:
+        - "Uber ride to airport 450 rupees" → {{"amount": 450, "category": "Travel", "merchant": "Uber"}}
+        - "Bought groceries for 1200 at Big Basket" → {{"amount": 1200, "category": "Food", "merchant": "Big Basket"}}
+        - "Paid electricity bill 800 rupees" → {{"amount": 800, "category": "Utilities", "merchant": null}}
+        """
+        
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": "You are a financial data extractor. Return only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=100
+        )
+        
+        result_text = response.choices[0].message.content.strip()
+        
+        import json
+        try:
+            start = result_text.find('{')
+            end = result_text.rfind('}') + 1
+            if start != -1 and end > start:
+                json_str = result_text[start:end]
+                parsed = json.loads(json_str)
+                
+                result = {
+                    'success': True,
+                    'amount': parsed.get('amount'),
+                    'category': parsed.get('category'),
+                    'merchant': parsed.get('merchant')
+                }
+                
+                valid_categories = ['Food', 'Rent', 'Travel', 'Shopping', 'Utilities', 'Entertainment', 'Healthcare', 'Other']
+                if result['category'] and result['category'] not in valid_categories:
+                    result['category'] = 'Other'
+                
+                return jsonify(result)
+            else:
+                raise ValueError("No JSON found in response")
+                
+        except Exception as e:
+            print(f"JSON parse error: {e}")
+            return jsonify({'success': False, 'error': 'Failed to parse AI response'}), 500
+        
+    except Exception as e:
+        print(f"Voice parse error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ---------------- RUN ----------------
