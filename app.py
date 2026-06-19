@@ -379,6 +379,8 @@ def force_weekly():
     send_weekly_reports()
     return "Weekly reports sent manually!"
 
+
+
 # ---------------- RECURRING EXPENSES ROUTES ----------------
 @app.route('/recurring')
 def recurring_page():
