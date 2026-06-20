@@ -43,7 +43,9 @@ if not GROQ_API_KEY or GROQ_API_KEY.strip() in ("", "your_groq_api_key_here"):
         "  Obtain a free key at: https://console.groq.com/\n",
         file=sys.stderr,
     )
+
     sys.exit(1)
+
     client = None
 else:
     client = Groq(api_key=GROQ_API_KEY)
@@ -1279,6 +1281,56 @@ def money_score():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+
+# ---------------- CREDIT HEALTH FEEDBACK ----------------
+@app.route("/credit-feedback", methods=["POST"])
+def credit_feedback():
+
+    try:
+        data = request.json or {}
+
+        score = data.get("score", 0)
+        dti = data.get("dti", 0)
+        utilization = data.get("utilization", 0)
+        payment = data.get("payment", 0)
+
+        advice = []
+
+        if utilization > 30:
+            advice.append(
+                "Reduce credit utilization below 30%."
+            )
+
+        if dti > 40:
+            advice.append(
+                "Lower your debt-to-income ratio."
+            )
+
+        if payment < 90:
+            advice.append(
+                "Maintain timely payments to improve credit history."
+            )
+
+        if score >= 750:
+            advice.append(
+                "Excellent credit profile. Maintain your habits."
+            )
+
+        if not advice:
+            advice.append(
+                "Keep monitoring your credit health regularly."
+            )
+
+        return jsonify({
+            "message": " ".join(advice)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 400
+
+
 # ---------------- EXPORT FINANCIAL REPORT ----------------
 EXPORT_FIELDS = ["income", "expenses", "savings", "investments", "debt", "emergency", "tax", "money_score", "sip_projection"]
 EXPORT_FIELD_LABELS = {"income": "Income", "expenses": "Expenses", "savings": "Savings", "investments": "Investments", "debt": "Debt", "emergency": "Emergency Fund", "tax": "Tax Estimate", "money_score": "Money Score", "sip_projection": "SIP Projection"}
@@ -2470,4 +2522,9 @@ if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
 # ---------------- RUN ----------------
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "False").lower() in ("true", "1", "yes")
+
     app.run(debug=debug_mode)
+
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
+
