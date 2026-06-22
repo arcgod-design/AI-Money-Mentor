@@ -39,7 +39,7 @@ from werkzeug.security import (
     check_password_hash
 )
 
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule
 
 from utils.portfolio_optimizer import PortfolioOptimizer
 from flask_mail import Mail, Message
@@ -316,7 +316,7 @@ def process_recurring_incomes():
         print(f"❌ Error processing recurring incomes: {e}")
 
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -378,6 +378,14 @@ scheduler.add_job(
     func=process_recurring_incomes,
     trigger=CronTrigger(hour=9, minute=0),
     id='recurring_income_job',
+    replace_existing=True
+)
+
+# SIP due reminders job - Every day at 9:00 AM
+scheduler.add_job(
+    func=check_sip_due_reminders,
+    trigger=CronTrigger(hour=9, minute=0),
+    id='sip_due_reminders_job',
     replace_existing=True
 )
 
@@ -2468,6 +2476,19 @@ def run_threshold_checks(user_id, category, year_month=None):
                 db.session.add(alert)
                 triggered.append(threshold)
                 print(f"\n[EMAIL ALERT] Budget Alert: {category} spending reached {threshold}%\n", file=sys.stderr)
+
+                # Add milestone notification
+                title = f"Budget Alert: {threshold}% Limit Crossed"
+                message = f"Your spending in category '{category}' has reached {threshold}% of your limit (₹{total_spent:,.2f} of ₹{limit_amount_inr:,.2f})."
+                notification = MilestoneNotification(
+                    user_id=user_id,
+                    title=title,
+                    message=message,
+                    category="budget",
+                    ref_id=limit.id,
+                    milestone_value=float(threshold)
+                )
+                db.session.add(notification)
     if triggered:
         db.session.commit()
     return triggered
@@ -2634,6 +2655,32 @@ def persist_goal_milestones(goal, milestones):
         ))
     db.session.commit()
 
+def check_goal_milestones(goal):
+    if goal.target_amount <= 0:
+        return
+    pct = (goal.current_amount / goal.target_amount) * 100.0
+    for threshold in [25.0, 50.0, 75.0, 100.0]:
+        if pct >= threshold:
+            exists = MilestoneNotification.query.filter_by(
+                user_id=goal.user_id,
+                category="goal",
+                ref_id=goal.id,
+                milestone_value=threshold
+            ).first()
+            if not exists:
+                title = f"Goal Milestone Reached: {int(threshold)}%"
+                message = f"Incredible! You have reached {int(threshold)}% of your target for your goal '{goal.name}' (₹{goal.current_amount:,.2f} of ₹{goal.target_amount:,.2f})."
+                notification = MilestoneNotification(
+                    user_id=goal.user_id,
+                    title=title,
+                    message=message,
+                    category="goal",
+                    ref_id=goal.id,
+                    milestone_value=threshold
+                )
+                db.session.add(notification)
+    db.session.commit()
+
 @app.route("/goals", methods=["GET", "POST"])
 @login_required
 def goals():
@@ -2662,6 +2709,7 @@ def goals():
 
         milestones = compute_monthly_milestones(goal)
         persist_goal_milestones(goal, milestones)
+        check_goal_milestones(goal)
 
         return jsonify({"status": "success", "goal": goal.to_dict()})
     except ValidationError as e:
@@ -2700,6 +2748,7 @@ def goal_detail(goal_id):
 
             milestones = compute_monthly_milestones(goal)
             persist_goal_milestones(goal, milestones)
+            check_goal_milestones(goal)
 
             return jsonify({"status": "success", "goal": goal.to_dict()})
     except ValidationError as e:
@@ -2753,347 +2802,150 @@ def get_goals():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route("/recurring-expense/<int:recurring_id>", methods=["DELETE"])
-@login_required
-def disable_recurring_expense(recurring_id):
-    try:
-        item = RecurringExpense.query.filter_by(id=recurring_id, user_id=current_user.id).first()
-        if not item:
-            return jsonify({"error": "Recurring expense not found"}), 404
-        if item.user_id != current_user.id:
-            return jsonify({"error": "Unauthorized"}), 403
-        item.active = False
-        db.session.commit()
-        return jsonify({"status": "success", "id": recurring_id})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-# ---------------- BUDGET THRESHOLD CHECKS ----------------
-def run_threshold_checks(user_id, category, year_month=None):
-    if not year_month:
+# ---------------- PERSONAL FINANCE MILESTONES & SIP ----------------
+def check_sip_due_reminders():
+    with app.app_context():
         import datetime
-        year_month = datetime.datetime.now().strftime("%Y-%m")
-        
-    limit = BudgetLimit.query.filter_by(user_id=user_id, category=category).first()
-    if not limit or limit.limit_amount <= 0:
-        return []
-        
-    expenses = Expense.query.filter(
-        Expense.user_id == user_id,
-        Expense.category == category,
-        Expense.date.like(f"{year_month}%")
-    ).all()
-    
-    total_spent = sum(convert_to_base(e.amount, e.currency) for e in expenses)
-    limit_amount_inr = convert_to_base(limit.limit_amount, limit.currency)
-    pct = total_spent / limit_amount_inr if limit_amount_inr > 0 else 0.0
-    
-    triggered = []
-    for threshold in [100, 90, 80]:
-        target = threshold / 100.0
-        if pct >= target:
-            exists = BudgetAlert.query.filter_by(
-                user_id=user_id,
-                category=category,
-                year_month=year_month,
-                threshold=threshold
-            ).first()
-            if not exists:
-                alert = BudgetAlert(
-                    category=category,
-                    year_month=year_month,
-                    threshold=threshold,
-                    currency=limit.currency,
-                    user_id=user_id
-                )
-                db.session.add(alert)
-                triggered.append(threshold)
-                print(f"\n[EMAIL ALERT] Budget Alert: {category} spending reached {threshold}%\n", file=sys.stderr)
-    if triggered:
+        today = datetime.date.today()
+        day = today.day
+        year_month_as_int = today.year * 100 + today.month
+
+        schedules = SipSchedule.query.filter_by(is_active=True, day_of_month=day).all()
+
+        for sip in schedules:
+            if sip.last_notified_at:
+                ln = sip.last_notified_at.date()
+                if ln.year == today.year and ln.month == today.month:
+                    continue
+
+            title = f"SIP Payment Due: {sip.name}"
+            message = f"Your monthly SIP payment of {sip.currency} {sip.amount:,.2f} for '{sip.name}' is due today."
+            notification = MilestoneNotification(
+                user_id=sip.user_id,
+                title=title,
+                message=message,
+                category="sip",
+                ref_id=sip.id,
+                milestone_value=float(year_month_as_int)
+            )
+            db.session.add(notification)
+            sip.last_notified_at = datetime.datetime.utcnow()
+
         db.session.commit()
-    return triggered
 
-# ---------------- SMART BUDGET ALERTS ----------------
-@app.route("/budget/limits", methods=["GET", "POST"])
+@app.route("/milestones")
 @login_required
-def budget_limits():
-    if request.method == "POST":
-        try:
-            data = request.json or {}
-            if not isinstance(data, dict):
-                raise ValidationError("Request body must be a JSON object")
-            category = validate_string(data.get("category"), "category")
-            limit_amount = validate_float(data.get("limit_amount"), "limit_amount", min_val=0.0)
-            currency = validate_string(data.get("currency", "INR"), "currency")
-            
-            limit = BudgetLimit.query.filter_by(user_id=current_user.id, category=category).first()
-            if limit:
-                limit.limit_amount = limit_amount
-                limit.currency = currency
-            else:
-                limit = BudgetLimit(user_id=current_user.id, category=category, limit_amount=limit_amount, currency=currency)
-                db.session.add(limit)
-            db.session.commit()
-            return jsonify({"status": "success"})
-        except ValidationError as e:
-            raise e
-        except Exception as e:
-            return jsonify({"error": str(e)}), 400
-    else:
-        limits = BudgetLimit.query.filter_by(user_id=current_user.id).order_by(BudgetLimit.category).all()
-        return jsonify([l.to_dict() for l in limits])
+def milestones_page():
+    return render_template("milestones.html", active_page="milestones")
 
-@app.route("/budget/status", methods=["GET"])
+@app.route("/api/milestones", methods=["GET"])
 @login_required
-def budget_status():
-    import datetime
-    year_month = request.args.get("month", datetime.datetime.now().strftime("%Y-%m"))
-    
-    limits = BudgetLimit.query.filter_by(user_id=current_user.id).all()
-    limits_map = {l.category: (l.limit_amount, l.currency) for l in limits}
-    
-    expenses = Expense.query.filter(Expense.user_id == current_user.id, Expense.date.like(f"{year_month}%")).all()
-    
-    spent_by_category_inr = {}
-    for e in expenses:
-        spent_by_category_inr[e.category] = spent_by_category_inr.get(e.category, 0.0) + convert_to_base(e.amount, e.currency)
-        
-    status_list = []
-    all_categories = set(limits_map.keys()) | set(spent_by_category_inr.keys())
-    
-    total_budgeted_inr = 0.0
-    total_spent_inr = sum(spent_by_category_inr.values())
-    
-    for cat in sorted(all_categories):
-        lim_orig, lim_curr = limits_map.get(cat, (0.0, 'INR'))
-        lim_inr = convert_to_base(lim_orig, lim_curr)
-        total_budgeted_inr += lim_inr
-        
-        spent_inr = spent_by_category_inr.get(cat, 0.0)
-        pct = (spent_inr / lim_inr * 100) if lim_inr > 0 else 0.0
-        status_list.append({
-            "category": cat,
-            "limit_amount": lim_orig,
-            "currency": lim_curr,
-            "spent": spent_inr,
-            "percentage": round(pct, 2)
-        })
-        
-    return jsonify({
-        "month": year_month,
-        "categories": status_list,
-        "total_budgeted": total_budgeted_inr,
-        "total_spent": total_spent_inr
-    })
-
-@app.route("/budget/alerts", methods=["GET"])
-@login_required
-def budget_alerts():
-    alerts = BudgetAlert.query.filter_by(user_id=current_user.id).order_by(BudgetAlert.triggered_at.desc()).limit(10).all()
-    return jsonify([a.to_dict() for a in alerts])
-
-@app.route("/budget/limits/<int:limit_id>", methods=["DELETE"])
-@login_required
-def delete_budget_limit(limit_id):
+def get_milestone_notifications():
     try:
-        limit = BudgetLimit.query.filter_by(id=limit_id, user_id=current_user.id).first()
-        if not limit:
-            return jsonify({"error": f"Budget limit with id {limit_id} not found."}), 404
-        BudgetAlert.query.filter_by(user_id=current_user.id, category=limit.category).delete(synchronize_session="fetch")
-        db.session.delete(limit)
-        db.session.commit()
-        return jsonify({"status": "success", "deleted_category": limit.category})
+        unread_only = request.args.get("unread_only", "false").lower() == "true"
+        query = MilestoneNotification.query.filter_by(user_id=current_user.id)
+        if unread_only:
+            query = query.filter_by(is_read=False)
+        notifications = query.order_by(MilestoneNotification.triggered_at.desc()).all()
+        return jsonify([n.to_dict() for n in notifications])
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-# ---------------- FINANCIAL GOALS TRACKER ----------------
-def _months_diff(start_dt, end_dt):
-    return (end_dt.year - start_dt.year) * 12 + (end_dt.month - start_dt.month)
-
-def _ym_add_months(base_dt, months):
-    year = base_dt.year + (base_dt.month - 1 + months) // 12
-    month = (base_dt.month - 1 + months) % 12 + 1
-    return year, month
-
-def compute_monthly_milestones(goal):
-    from datetime import datetime
-
-    remaining = float(goal.target_amount) - float(goal.current_amount)
-    if remaining <= 0:
-        target_dt = datetime.strptime(goal.target_date, "%Y-%m")
-        now = datetime.now()
-        months_remaining = _months_diff(datetime(now.year, now.month, 1), datetime(target_dt.year, target_dt.month, 1))
-        if months_remaining < 0:
-            months_remaining = 0
-        if months_remaining == 0:
-            months_remaining = 1
-
-        milestones = []
-        for i in range(months_remaining):
-            y, m = _ym_add_months(datetime(now.year, now.month, 1), i)
-            milestones.append({
-                "month": f"{y:04d}-{m:02d}",
-                "target_amount_for_month": 0.0,
-                "status": "completed",
-            })
-        return milestones
-
-    target_dt = datetime.strptime(goal.target_date, "%Y-%m")
-    now = datetime.now()
-
-    start = datetime(now.year, now.month, 1)
-    end = datetime(target_dt.year, target_dt.month, 1)
-    months_remaining = _months_diff(start, end)
-    if months_remaining <= 0:
-        months_remaining = 1
-
-    base = remaining / months_remaining
-    amounts = [round(base, 2) for _ in range(months_remaining)]
-    total_alloc = round(sum(amounts), 2)
-    diff = round(remaining - total_alloc, 2)
-    amounts[-1] = round(amounts[-1] + diff, 2)
-
-    milestones = []
-    for i in range(months_remaining):
-        y, m = _ym_add_months(start, i)
-        milestones.append({
-            "month": f"{y:04d}-{m:02d}",
-            "target_amount_for_month": float(amounts[i]),
-            "status": "planned",
-        })
-
-    return milestones
-
-def persist_goal_milestones(goal, milestones):
-    FinancialGoalMilestone.query.filter_by(goal_id=goal.id).delete(synchronize_session=False)
-    for ms in milestones:
-        db.session.add(FinancialGoalMilestone(
-            goal_id=goal.id,
-            month=ms["month"],
-            target_amount_for_month=ms["target_amount_for_month"],
-            status=ms["status"],
-        ))
-    db.session.commit()
-
-@app.route("/goals", methods=["GET", "POST"])
+@app.route("/api/milestones/read", methods=["POST"])
 @login_required
-def goals():
-    if request.method == "GET":
-        return render_template("goals.html", active_page="goals")
+def mark_milestones_read():
     try:
         data = request.json or {}
-        if not isinstance(data, dict):
-            raise ValidationError("Request body must be a JSON object")
-        name = validate_string(data.get("name"), "name")
-        target_amount = validate_float(data.get("target_amount"), "target_amount", min_val=0.01)
-        current_amount = validate_float(data.get("current_amount", 0.0), "current_amount", min_val=0.0)
-        target_date = validate_string(data.get("target_date"), "target_date")
+        notif_id = data.get("id")
+        if notif_id:
+            notification = MilestoneNotification.query.filter_by(id=notif_id, user_id=current_user.id).first()
+            if notification:
+                notification.is_read = True
+        else:
+            MilestoneNotification.query.filter_by(user_id=current_user.id).update({"is_read": True})
+        db.session.commit()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
-        goal = FinancialGoal(
+@app.route("/api/sip/schedules", methods=["GET"])
+@login_required
+def get_sip_schedules():
+    try:
+        schedules = SipSchedule.query.filter_by(user_id=current_user.id).all()
+        return jsonify([s.to_dict() for s in schedules])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/sip/schedules", methods=["POST"])
+@login_required
+def create_sip_schedule():
+    try:
+        data = request.json or {}
+        if not data or "name" not in data or "amount" not in data or "day_of_month" not in data:
+            return jsonify({"error": "Missing required fields"}), 400
+        name = validate_string(data["name"], "name")
+        amount = validate_float(data["amount"], "amount", min_val=0.01)
+        day_of_month = validate_int(data["day_of_month"], "day_of_month", min_val=1, max_val=28)
+        currency = validate_string(data.get("currency", "INR"), "currency")
+
+        schedule = SipSchedule(
             user_id=current_user.id,
             name=name,
-            target_amount=target_amount,
-            current_amount=current_amount,
-            target_date=target_date
+            amount=amount,
+            day_of_month=day_of_month,
+            currency=currency,
+            is_active=True
         )
-        db.session.add(goal)
+        db.session.add(schedule)
         db.session.commit()
-
-        milestones = compute_monthly_milestones(goal)
-        persist_goal_milestones(goal, milestones)
-
-        return jsonify({"status": "success", "goal": goal.to_dict()})
-    except ValidationError as e:
-        raise e
+        return jsonify(schedule.to_dict()), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@app.route("/goals/<int:goal_id>", methods=["PUT", "DELETE"])
+@app.route("/api/sip/schedules/<int:schedule_id>", methods=["DELETE"])
 @login_required
-def goal_detail(goal_id):
+def delete_sip_schedule(schedule_id):
     try:
-        goal = FinancialGoal.query.filter_by(id=goal_id, user_id=current_user.id).first()
-        if not goal:
-            return jsonify({"error": "Goal not found"}), 404
-
-        if request.method == "DELETE":
-            FinancialGoalMilestone.query.filter_by(goal_id=goal.id).delete(synchronize_session=False)
-            db.session.delete(goal)
-            db.session.commit()
-            return jsonify({"status": "success"})
-        else:  # PUT
-            data = request.json or {}
-            if not isinstance(data, dict):
-                raise ValidationError("Request body must be a JSON object")
-            if "name" in data:
-                goal.name = validate_string(data["name"], "name")
-            if "target_amount" in data:
-                goal.target_amount = validate_float(data["target_amount"], "target_amount", min_val=0.01)
-            if "current_amount" in data:
-                goal.current_amount = validate_float(data["current_amount"], "current_amount", min_val=0.0)
-            if "target_date" in data:
-                goal.target_date = validate_string(data["target_date"], "target_date")
-            db.session.commit()
-
-            milestones = compute_monthly_milestones(goal)
-            persist_goal_milestones(goal, milestones)
-
-            return jsonify({"status": "success", "goal": goal.to_dict()})
-    except ValidationError as e:
-        raise e
+        schedule = SipSchedule.query.filter_by(id=schedule_id, user_id=current_user.id).first()
+        if not schedule:
+            return jsonify({"error": "SIP schedule not found"}), 404
+        db.session.delete(schedule)
+        db.session.commit()
+        return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@app.route("/api/goals", methods=["GET"])
+@app.route("/api/sip/schedules/<int:schedule_id>/pay", methods=["POST"])
 @login_required
-def get_goals():
+def pay_sip_installment(schedule_id):
     try:
-        goals = FinancialGoal.query.filter_by(user_id=current_user.id).order_by(FinancialGoal.created_at.desc()).all()
-        goals_list = [g.to_dict() for g in goals]
-
-        ai_recommendations = {}
-        if client and len(goals_list) > 0:
-            for goal in goals_list:
-                remaining = goal["target_amount"] - goal["current_amount"]
-                if remaining > 0:
-                    try:
-                        from datetime import datetime
-                        target_dt = datetime.strptime(goal["target_date"], "%Y-%m")
-                        now = datetime.now()
-                        months_remaining = (target_dt.year - now.year) * 12 + (target_dt.month - now.month)
-                        if months_remaining <= 0:
-                            months_remaining = 1
-
-                        monthly_needed = remaining / months_remaining
-                        prompt = (
-                            f"Goal: {goal['name']}\n"
-                            f"Target amount: ₹{goal['target_amount']:,}\n"
-                            f"Current saved: ₹{goal['current_amount']:,}\n"
-                            f"Remaining: ₹{remaining:,}\n"
-                            f"Months remaining: {months_remaining}\n"
-                            f"Required monthly savings: ₹{monthly_needed:,.2f}\n\n"
-                            f"Give 3-4 practical, actionable tips to reach this financial goal faster in India. Keep it concise."
-                        )
-                        res = client.chat.completions.create(
-                            model="llama-3.1-8b-instant",
-                            messages=[
-                                {"role": "system", "content": "You are a helpful Indian personal finance advisor."},
-                                {"role": "user", "content": prompt}
-                            ]
-                        )
-                        ai_recommendations[goal["id"]] = res.choices[0].message.content.strip()
-                    except Exception as ai_err:
-                        app.logger.error(f"Goal AI Recommendation Error: {str(ai_err)}")
-                        ai_recommendations[goal["id"]] = "AI recommendations unavailable."
-
-        return jsonify({"goals": goals_list, "ai_recommendations": ai_recommendations})
+        schedule = SipSchedule.query.filter_by(id=schedule_id, user_id=current_user.id).first()
+        if not schedule:
+            return jsonify({"error": "SIP schedule not found"}), 404
+        
+        old_total = schedule.total_invested
+        schedule.total_invested += schedule.amount
+        
+        # Check compounding milestones (10k, 50k, 100k, 500k, 1m)
+        for milestone in [10000.0, 50000.0, 100000.0, 500000.0, 1000000.0]:
+            if old_total < milestone <= schedule.total_invested:
+                title = f"SIP Milestone Reached: {schedule.currency} {milestone:,.0f}"
+                message = f"Amazing! Your total investments in SIP '{schedule.name}' have reached {schedule.currency} {schedule.total_invested:,.2f}."
+                notification = MilestoneNotification(
+                    user_id=current_user.id,
+                    title=title,
+                    message=message,
+                    category="sip",
+                    ref_id=schedule.id,
+                    milestone_value=float(milestone)
+                )
+                db.session.add(notification)
+        
+        db.session.commit()
+        return jsonify({"status": "success", "schedule": schedule.to_dict()})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 # ---------------- SCHEDULER ----------------
 def check_all_budgets_job():
@@ -3621,6 +3473,7 @@ if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     scheduler.add_job(check_all_budgets_job, 'interval', days=1)
     scheduler.add_job(check_all_recurring_expenses_job, 'interval', days=1)
     scheduler.add_job(check_stock_alerts_job, 'interval', minutes=10)
+    scheduler.add_job(check_sip_due_reminders, 'interval', days=1)
     scheduler.start()
 
 # ---------------- RUN ----------------

@@ -535,3 +535,61 @@ class LedgerEntry(db.Model):
             'description': self.description,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
+
+
+class MilestoneNotification(db.Model):
+    __tablename__ = "milestone_notifications"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    title = db.Column(db.String(150), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(50), nullable=False)  # goal, budget, sip
+    triggered_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, default=False)
+    ref_id = db.Column(db.Integer, nullable=True)
+    milestone_value = db.Column(db.Float, nullable=True)
+
+    user = db.relationship("User", backref="milestone_notifications")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "message": self.message,
+            "category": self.category,
+            "triggered_at": self.triggered_at.isoformat() if self.triggered_at else None,
+            "is_read": self.is_read,
+            "ref_id": self.ref_id,
+            "milestone_value": self.milestone_value
+        }
+
+
+class SipSchedule(db.Model):
+    __tablename__ = "sip_schedules"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    day_of_month = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_notified_at = db.Column(db.DateTime, nullable=True)
+    total_invested = db.Column(db.Float, default=0.0)
+
+    user = db.relationship("User", backref="sip_schedules")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "amount": self.amount,
+            "day_of_month": self.day_of_month,
+            "currency": self.currency,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_notified_at": self.last_notified_at.isoformat() if self.last_notified_at else None,
+            "total_invested": self.total_invested
+        }
