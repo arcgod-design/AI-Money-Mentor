@@ -39,7 +39,7 @@ from werkzeug.security import (
     check_password_hash
 )
 
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence
 
 from utils.portfolio_optimizer import PortfolioOptimizer
 from flask_mail import Mail, Message
@@ -189,7 +189,7 @@ def process_recurring_expenses():
     
     try:
 
-       from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone
+       from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence
 
         
         # Get all active recurring expenses due today
@@ -249,8 +249,74 @@ def process_recurring_expenses():
         db.session.rollback()
         print(f"❌ Error processing recurring expenses: {e}")
 
+def process_recurring_incomes():
+    """Process recurring incomes and add them to income occurrences"""
+    print("🔄 Processing recurring incomes...")
+    today = date.today()
+    
+    try:
+        from models import db, RecurringIncome, IncomeOccurrence
+        
+        # Get all active recurring incomes due today
+        due_incomes = RecurringIncome.query.filter(
+            RecurringIncome.is_active == True,
+            RecurringIncome.next_due_date <= today
+        ).all()
+        
+        if not due_incomes:
+            print("📭 No recurring incomes due today")
+            return
+        
+        added_count = 0
+        for recurring in due_incomes:
+            # Check if already added today (avoid duplicates)
+            existing = IncomeOccurrence.query.filter(
+                IncomeOccurrence.recurring_income_id == recurring.id,
+                IncomeOccurrence.date == today
+            ).first()
+            
+            if existing:
+                continue
+            
+            # Create income occurrence entry
+            occurrence = IncomeOccurrence(
+                user_id=recurring.user_id,
+                recurring_income_id=recurring.id,
+                amount=recurring.amount,
+                category=recurring.category,
+                source=recurring.source,
+                date=today,
+                currency=recurring.currency
+            )
+            db.session.add(occurrence)
+            
+            # Update next due date based on frequency
+            if recurring.frequency == 'daily':
+                next_date = today + timedelta(days=1)
+            elif recurring.frequency == 'weekly':
+                next_date = today + timedelta(days=7)
+            elif recurring.frequency == 'monthly':
+                next_date = today + timedelta(days=30)
+            elif recurring.frequency == 'quarterly':
+                next_date = today + timedelta(days=90)
+            elif recurring.frequency == 'yearly':
+                next_date = today + timedelta(days=365)
+            else:
+                next_date = today + timedelta(days=30)
+            
+            recurring.next_due_date = next_date
+            recurring.last_processed = today
+            added_count += 1
+        
+        db.session.commit()
+        print(f"✅ Added {added_count} recurring incomes")
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error processing recurring incomes: {e}")
+
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, FxRateCache, FinancialGoalMilestone
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -304,6 +370,14 @@ scheduler.add_job(
     func=process_recurring_expenses,
     trigger=CronTrigger(hour=9, minute=0),
     id='recurring_expense_job',
+    replace_existing=True
+)
+
+# Recurring incomes job - Every day at 9:00 AM
+scheduler.add_job(
+    func=process_recurring_incomes,
+    trigger=CronTrigger(hour=9, minute=0),
+    id='recurring_income_job',
     replace_existing=True
 )
 
@@ -825,6 +899,246 @@ def process_recurring_now():
     """Manually trigger recurring expense processing (for testing)"""
     process_recurring_expenses()
     return jsonify({'success': True, 'message': 'Recurring expenses processed'})
+
+# ---------------- RECURRING INCOME ENDPOINTS ----------------
+
+@app.route('/recurring-income-page')
+@login_required
+def recurring_income_page():
+    return render_template('recurring_income.html', active_page='recurring_income')
+
+@app.route('/recurring-income', methods=['GET', 'POST'])
+@login_required
+def handle_recurring_income():
+    if request.method == 'POST':
+        try:
+            data = request.json or {}
+            if not isinstance(data, dict):
+                raise ValidationError("Request body must be a JSON object")
+            
+            amount = validate_float(data.get("amount"), "amount", min_val=0.01)
+            category = validate_string(data.get("category"), "category").strip()
+            source = validate_string(data.get("source"), "source").strip()
+            frequency = validate_string(data.get("frequency"), "frequency").strip()
+            if frequency not in ['daily', 'weekly', 'monthly', 'quarterly', 'yearly']:
+                raise ValidationError("Invalid frequency")
+            
+            start_date_str = validate_string(data.get("start_date"), "start_date")
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValidationError("start_date must be in YYYY-MM-DD format")
+            
+            next_due_date_str = data.get("next_due_date")
+            if next_due_date_str:
+                next_due_date_str = validate_string(next_due_date_str, "next_due_date")
+                try:
+                    next_due_date = datetime.strptime(next_due_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    raise ValidationError("next_due_date must be in YYYY-MM-DD format")
+            else:
+                next_due_date = start_date
+
+            end_date_str = data.get("end_date")
+            end_date = None
+            if end_date_str:
+                end_date_str = validate_string(end_date_str, "end_date")
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    raise ValidationError("end_date must be in YYYY-MM-DD format")
+
+            currency = validate_string(data.get("currency", "INR"), "currency").strip().upper()
+            
+            rec_income = RecurringIncome(
+                user_id=current_user.id,
+                amount=amount,
+                category=category,
+                source=source,
+                frequency=frequency,
+                start_date=start_date,
+                next_due_date=next_due_date,
+                end_date=end_date,
+                currency=currency,
+                is_active=True
+            )
+            db.session.add(rec_income)
+            db.session.commit()
+            return jsonify({"success": True, "message": "Recurring income added successfully", "id": rec_income.id})
+        except ValidationError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(e)}), 500
+            
+    # GET method
+    try:
+        incomes = RecurringIncome.query.filter_by(user_id=current_user.id, is_active=True).all()
+        return jsonify({
+            "success": True,
+            "incomes": [inc.to_dict() for inc in incomes]
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/recurring-income/<int:id>', methods=['DELETE'])
+@login_required
+def delete_recurring_income(id):
+    try:
+        inc = RecurringIncome.query.filter_by(id=id, user_id=current_user.id).first()
+        if not inc:
+            return jsonify({"success": False, "error": "Not found"}), 404
+        
+        inc.is_active = False
+        db.session.commit()
+        return jsonify({"success": True, "message": "Recurring income disabled successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ---------------- CASHFLOW FORECAST API ----------------
+
+@app.route('/cashflow', methods=['GET'])
+@login_required
+def get_cashflow_forecast():
+    import calendar
+    try:
+        n_months = validate_int(request.args.get("months", "6"), "months", min_val=1, max_val=24)
+    except ValidationError:
+        n_months = 6
+        
+    today = date.today()
+    current_year = today.year
+    current_month = today.month
+    
+    month_keys = []
+    for i in range(n_months):
+        m = current_month + i
+        y = current_year + (m - 1) // 12
+        m = (m - 1) % 12 + 1
+        month_keys.append(f"{y:04d}-{m:02d}")
+        
+    # Get projection end date
+    last_month_parts = month_keys[-1].split("-")
+    last_year = int(last_month_parts[0])
+    last_month = int(last_month_parts[1])
+    _, last_day = calendar.monthrange(last_year, last_month)
+    projection_end_date = date(last_year, last_month, last_day)
+    
+    # Helper to advance date
+    def advance_date(curr_d, freq):
+        if freq == 'daily':
+            return curr_d + timedelta(days=1)
+        elif freq == 'weekly':
+            return curr_d + timedelta(days=7)
+        elif freq == 'monthly':
+            m = curr_d.month + 1
+            y = curr_d.year + (m - 1) // 12
+            m = (m - 1) % 12 + 1
+            try:
+                return date(y, m, curr_d.day)
+            except ValueError:
+                _, last_d = calendar.monthrange(y, m)
+                return date(y, m, last_d)
+        elif freq == 'quarterly':
+            m = curr_d.month + 3
+            y = curr_d.year + (m - 1) // 12
+            m = (m - 1) % 12 + 1
+            try:
+                return date(y, m, curr_d.day)
+            except ValueError:
+                _, last_d = calendar.monthrange(y, m)
+                return date(y, m, last_d)
+        elif freq == 'yearly':
+            y = curr_d.year + 1
+            try:
+                return date(y, curr_d.month, curr_d.day)
+            except ValueError:
+                return date(y, 2, 28)
+        else:
+            return curr_d + timedelta(days=30)
+            
+    # Project Incomes
+    projected_income = {m: 0.0 for m in month_keys}
+    incomes = RecurringIncome.query.filter_by(user_id=current_user.id, is_active=True).all()
+    for inc in incomes:
+        curr_d = inc.next_due_date
+        if curr_d < inc.start_date:
+            curr_d = inc.start_date
+        while curr_d <= projection_end_date:
+            if inc.end_date and curr_d > inc.end_date:
+                break
+            m_key = curr_d.strftime("%Y-%m")
+            if m_key in projected_income:
+                projected_income[m_key] += convert_to_base(inc.amount, inc.currency)
+            curr_d = advance_date(curr_d, inc.frequency)
+            
+    # Project Recurring Expenses
+    projected_rec_expenses = {m: 0.0 for m in month_keys}
+    expenses = RecurringExpense.query.filter_by(user_id=current_user.id, is_active=True).all()
+    for exp in expenses:
+        curr_d = exp.next_due_date
+        if curr_d < exp.start_date:
+            curr_d = exp.start_date
+        while curr_d <= projection_end_date:
+            if exp.end_date and curr_d > exp.end_date:
+                break
+            m_key = curr_d.strftime("%Y-%m")
+            if m_key in projected_rec_expenses:
+                projected_rec_expenses[m_key] += convert_to_base(exp.amount, getattr(exp, 'currency', 'INR'))
+            curr_d = advance_date(curr_d, exp.frequency)
+            
+    # Calculate historical manual expense monthly average
+    cutoff_3m = date.today() - timedelta(days=90)
+    manual_expenses = Expense.query.filter(
+        Expense.user_id == current_user.id,
+        Expense.date >= cutoff_3m.strftime("%Y-%m-%d"),
+        Expense.is_recurring == False
+    ).all()
+    total_manual_inr = sum(convert_to_base(e.amount, e.currency) for e in manual_expenses)
+    avg_monthly_manual_expense = total_manual_inr / 3.0
+    
+    # Current net worth
+    assets = Asset.query.filter_by(user_id=current_user.id).all()
+    liabilities = Liability.query.filter_by(user_id=current_user.id).all()
+    net_worth = sum(convert_to_base(a.amount, a.currency) for a in assets) - sum(convert_to_base(l.amount, l.currency) for l in liabilities)
+    
+    balance = net_worth
+    projected_months = []
+    runway_months = None
+    
+    for idx, m_key in enumerate(month_keys):
+        inc_val = projected_income[m_key]
+        exp_val = projected_rec_expenses[m_key] + avg_monthly_manual_expense
+        net_val = inc_val - exp_val
+        balance += net_val
+        
+        if balance < 0 and runway_months is None:
+            runway_months = idx + 1
+            
+        projected_months.append({
+            "month": m_key,
+            "projected_income": round(inc_val, 2),
+            "projected_expense": round(exp_val, 2),
+            "net_cashflow": round(net_val, 2),
+            "cumulative_balance": round(balance, 2)
+        })
+        
+    if runway_months is None:
+        runway_status = "Healthy"
+        runway_msg = "No projected cash shortfalls."
+    else:
+        runway_status = "Critical"
+        runway_msg = f"Warning: Projected runway is {runway_months} month(s). Balance drops below zero in {runway_months} month(s)."
+        
+    return jsonify({
+        "success": True,
+        "forecast": projected_months,
+        "current_net_worth": round(net_worth, 2),
+        "runway_months": runway_months,
+        "runway_status": runway_status,
+        "runway_message": runway_msg
+    })
 
 # ---------------- HEALTH CHECK ----------------
 @app.route("/health", methods=["GET"])

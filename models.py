@@ -362,6 +362,63 @@ class FinancialGoalMilestone(db.Model):
     target_amount_for_month = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(20), default="planned")  # planned, completed
 
+class RecurringIncome(db.Model):
+    __tablename__ = 'recurring_incomes'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    category = db.Column(db.String(50), nullable=False)  # Salary, Rent, Freelance, Other
+    source = db.Column(db.String(100), nullable=False)    # Employer/Source Name
+    frequency = db.Column(db.String(20), nullable=False)   # daily, weekly, monthly, quarterly, yearly
+    start_date = db.Column(db.Date, nullable=False)
+    next_due_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_processed = db.Column(db.Date, nullable=True)
+
+    user = db.relationship("User", backref="recurring_incomes")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'amount': self.amount,
+            'category': self.category,
+            'source': self.source,
+            'frequency': self.frequency,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'next_due_date': self.next_due_date.isoformat() if self.next_due_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'is_active': self.is_active,
+            'currency': self.currency
+        }
+
+class IncomeOccurrence(db.Model):
+    __tablename__ = 'income_occurrences'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    recurring_income_id = db.Column(db.Integer, db.ForeignKey('recurring_incomes.id'), nullable=True)
+    amount = db.Column(db.Float, nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    source = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="income_occurrences")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'recurring_income_id': self.recurring_income_id,
+            'amount': self.amount,
+            'category': self.category,
+            'source': self.source,
+            'date': self.date.isoformat() if self.date else None,
+            'currency': self.currency
+        }
+
 # ============================================
 # LEDGER SYSTEM MODELS
 # ============================================
