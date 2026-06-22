@@ -1092,6 +1092,8 @@
     }
 
 
+
+
   .page-title {
     font-size: 18px;
   }
@@ -1102,8 +1104,6 @@
       font-size: 18px;
     }
     
-
-
 
     /* ===== GOAL TRACKER STYLING FIX ===== */
     #goalTracker {
@@ -1310,29 +1310,6 @@
       max-height: 280px;
       overflow: hidden;
       position: relative;
-
-      /* Safety Indicator */
-.safety-indicator {
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    margin-top: 6px;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-.safety-indicator.passed {
-    color: #2ecc8a;
-    background: rgba(46, 204, 138, 0.1);
-}
-.safety-indicator.warning {
-    color: #f39c12;
-    background: rgba(243, 156, 18, 0.1);
-}
-.safety-indicator.failed {
-    color: #e05252;
-    background: rgba(224, 82, 82, 0.1);
-}
     }
 
     /* ===== SAFETY INDICATOR ===== */
@@ -1356,6 +1333,31 @@
     .safety-indicator.failed {
       color: #e05252;
       background: rgba(224, 82, 82, 0.1);
+
+    }
+
+    /* ===== SAFETY INDICATOR ===== */
+    .safety-indicator {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .safety-indicator.passed {
+      color: #2ecc8a;
+      background: rgba(46, 204, 138, 0.1);
+    }
+    .safety-indicator.warning {
+      color: #f39c12;
+      background: rgba(243, 156, 18, 0.1);
+    }
+    .safety-indicator.failed {
+      color: #e05252;
+      background: rgba(224, 82, 82, 0.1);
+
     }
   </style>
 </head>
@@ -1374,9 +1376,6 @@
   <!-- ══════════ SIDEBAR ══════════ -->
   <div class="sidebar">
     <div class="logo">₹ Money Mentor</div>
-    <div class="nav-item" data-page="retirement">
-    <span class="icon">📈</span> Retirement Simulator
-</div>
     <button class="btn btn-ghost" id="themeToggle" onclick="toggleTheme()" style="margin-bottom:15px;width:100%;">
       ☀️ Light Mode
     </button>
@@ -1397,9 +1396,15 @@
 
     <div class="nav-item" data-page="ledger"><span class="icon">🏦</span> Ledger</div>
     <div class="nav-item" data-page="portfolio-optimizer"><span class="icon">📈</span> Portfolio Optimizer</div>
+
+
+
+    <div class="nav-item" data-page="ledger"><span class="icon">🏦</span> Ledger</div>
+    <div class="nav-item" data-page="portfolio-optimizer"><span class="icon">📈</span> Portfolio Optimizer</div>
     <div class="nav-item" data-page="rag-assistant"><span class="icon">🧠</span> RAG Assistant</div>
 
     <div class="nav-item" data-page="retirement"><span class="icon">📈</span> Retirement Simulator</div>
+
 
   </div>
 
@@ -1585,6 +1590,10 @@
     <!-- ── SIP CALCULATOR ─────────────── -->
     <div id="sip" class="page">
       <div class="page-title">📈 SIP <span>Calculator</span></div>
+      <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
+        <div class="card">
+
+
 
       <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
         <div class="card">
@@ -1706,6 +1715,8 @@
         <button type="submit">Add Expense</button>
       </form>
 
+
+
 <!---------- EXPENSE TRACK------------------->
 <div id="expense" class="page">
   <div class="page-title">💲 Expense Track and Insights</div>
@@ -1733,6 +1744,8 @@
   </form>
 
 
+
+
       <div class="cards">
         <div class="card" id="totalCard"><h2>Total Spend</h2></div>
         <div class="card" id="avgCard"><h2>Average Expense</h2></div>
@@ -1750,6 +1763,8 @@
           </tr>
         </thead>
 
+
+
        <thead>
   <tr>
     <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Date</th>
@@ -1758,6 +1773,7 @@
     <th style="text-align: center; padding: 10px; border-bottom: 1px solid #333;">Amount</th>
   </tr>
 </thead>
+
 
         <tbody id="expenseTableBody"></tbody>
       </table>
@@ -1971,6 +1987,22 @@
       return formatted;
     }
 
+
+    function appendMsg(boxId, role, text, safety) {
+      const box = document.getElementById(boxId);
+      const dashWelcome = document.getElementById('chatWelcome');
+      const chatWelcome = document.getElementById('chatPageWelcome');
+      
+      if (dashWelcome && !dashWelcome.classList.contains('hidden')) {
+
+
+    function appendMsg(boxId, role, text, safety) {
+      const box = document.getElementById(boxId);
+      const dashWelcome = document.getElementById('chatWelcome');
+      const chatWelcome = document.getElementById('chatPageWelcome');
+      
+      if (dashWelcome && !dashWelcome.classList.contains('hidden')) {
+
     function appendMsg(boxId, role, text, safety) {
       const box = document.getElementById(boxId);
       const dashWelcome = document.getElementById('chatWelcome');
@@ -1985,9 +2017,11 @@
     
     if (dashWelcome && !dashWelcome.classList.contains('hidden')) {
 
+
+
         dashWelcome.classList.add('hidden');
-    }
-    if (chatWelcome && !chatWelcome.classList.contains('hidden')) {
+      }
+      if (chatWelcome && !chatWelcome.classList.contains('hidden')) {
         chatWelcome.classList.add('hidden');
 
       }
@@ -1997,6 +2031,7 @@
       
       let content = text;
       if (role === 'bot') {
+
         content = formatMarkdown(text);
       }
       
@@ -2004,6 +2039,7 @@
       
       // Add safety indicator for bot messages
       if (role === 'bot' && safety) {
+
         const indicator = document.createElement('div');
         const passed = safety.passed;
         const confidence = safety.confidence_level || 'high';
@@ -2041,54 +2077,62 @@
     
     let content = text;
     if (role === 'bot') {
+
         content = formatMarkdown(text);
-    }
-    
-    d.innerHTML = `<div class="sender">${role === 'user' ? 'You' : 'AI Advisor'}</div>${content}`;
-    
-    // Add safety indicator for bot messages
-    if (role === 'bot' && safety) {
+      }
+      
+      d.innerHTML = `<div class="sender">${role === 'user' ? 'You' : 'AI Advisor'}</div>${content}`;
+      
+      // Add safety indicator for bot messages
+      if (role === 'bot' && safety) {
+
         const indicator = document.createElement('div');
         const passed = safety.passed;
         const confidence = safety.confidence_level || 'high';
         
         let className = 'safety-indicator';
         let icon = '✅';
-        let text = 'All safety checks passed';
+        let indicatorText = 'All safety checks passed';
         
         if (!passed) {
-            className += ' failed';
-            icon = '⚠️';
-            text = 'Response modified for safety';
+          className += ' failed';
+          icon = '⚠️';
+          indicatorText = 'Response modified for safety';
         } else if (confidence === 'medium') {
-            className += ' warning';
-            icon = '🟡';
-            text = 'Medium confidence - Verify details';
+          className += ' warning';
+          icon = '🟡';
+          indicatorText = 'Medium confidence - Verify details';
         } else if (confidence === 'low') {
-            className += ' failed';
-            icon = '🔴';
-            text = 'Low confidence - Verify details';
+          className += ' failed';
+          icon = '🔴';
+          indicatorText = 'Low confidence - Verify details';
         }
         
         indicator.className = className;
-        indicator.innerHTML = `${icon} ${text}`;
+        indicator.innerHTML = `${icon} ${indicatorText}`;
         d.appendChild(indicator);
+      }
+      
+      box.appendChild(d);
+      box.scrollTop = box.scrollHeight;
     }
-    
-    box.appendChild(d);
-    box.scrollTop = box.scrollHeight;
-}
 
     async function dashSend() {
-    const inp = document.getElementById('dashMsg');
-    const msg = inp.value.trim();
-    if (!msg) return;
-    inp.value = '';
-    appendMsg('dashChat', 'user', msg);
-    setLoading('dashBtn', true);
-    try {
+      const inp = document.getElementById('dashMsg');
+      const msg = inp.value.trim();
+      if (!msg) return;
+      inp.value = '';
+      appendMsg('dashChat', 'user', msg);
+      setLoading('dashBtn', true);
+      try {
         const data = await apiFetch('/chat', { message: msg });
         appendMsg('dashChat', 'bot', data.reply, data.safety);
+
+      } catch (e) {
+
+
+      } catch (e) {
+
 
       } catch (e) {
         appendMsg('dashChat', 'bot', '⚠ Could not reach server.');
@@ -2096,8 +2140,14 @@
       setLoading('dashBtn', false);
 
     } catch (e) {
+
+
         appendMsg('dashChat', 'bot', '⚠ Could not reach server.');
+      }
+      setLoading('dashBtn', false);
     }
+
+
     setLoading('dashBtn', false);
 }
 
@@ -2120,6 +2170,8 @@ async function chatSend() {
     }
     setLoading('chatBtn', false);
 }
+
+
 
     function dashQuick(text) {
       document.getElementById('dashMsg').value = text;
@@ -2252,6 +2304,29 @@ async function chatSend() {
         document.getElementById("totalCard").innerHTML = `<h2>Total Spend</h2><p>₹${calcData.Total || 0}</p>`;
         document.getElementById("avgCard").innerHTML = `<h2>Average Expense</h2><p>₹${(calcData.Average || 0).toFixed(2)}</p>`;
 
+
+        const tableBody = document.getElementById("expenseTableBody");
+        tableBody.innerHTML = "";
+
+        (calcData.expenses || []).forEach(expense => {
+          const formattedDate = new Date(expense.date).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric"
+          });
+
+          tableBody.innerHTML += `
+            <tr>
+              <td style="padding:10px;border-bottom:1px solid #222;">${formattedDate}</td>
+              <td style="padding:10px;border-bottom:1px solid #222;">${expense.category}</td>
+              <td style="padding:10px;border-bottom:1px solid #222;">${expense.merchant || '-'}</td>
+              <td style="padding:10px;border-bottom:1px solid #222;">₹${expense.amount}</td>
+            </tr>
+          `;
+        });
+
+
+
         const tableBody = document.getElementById("expenseTableBody");
         tableBody.innerHTML = "";
 
@@ -2272,6 +2347,10 @@ async function chatSend() {
             </tr>
           `;
 
+        });
+
+
+
                 <tr>
                     <td style="padding:10px;border-bottom:1px solid #222;">
                         ${formattedDate}
@@ -2289,6 +2368,8 @@ async function chatSend() {
             `;
 
         });
+
+
 
         const categories = calcData["By Category"] || {};
         const chartCanvas = document.getElementById("expenseChart");
@@ -2394,6 +2475,8 @@ async function chatSend() {
               </tr>
             `;
 
+
+
                 <tr style="border-bottom: 1px solid var(--border);">
                   <td style="padding: 8px;">${item.name}</td>
                   <td style="padding: 8px; text-align: right;">₹${fmtNum(item.amount)}</td>
@@ -2414,7 +2497,6 @@ let goals = [];
                           
 
 
-
           });
         }
       } catch (e) {
@@ -2427,6 +2509,15 @@ let goals = [];
       _origShowPage(name, e);
       if (name === 'networth') loadNetWorth();
     };
+
+    // ══════════════════════════════════════════════
+    // THEME TOGGLE
+    // ══════════════════════════════════════════════
+
+
+    // ══════════════════════════════════════════════
+    // THEME TOGGLE
+    // ══════════════════════════════════════════════
 
 
     // ══════════════════════════════════════════════
@@ -2599,6 +2690,8 @@ Add Savings
        THEME TOGGLE (global scope)
     ══════════════════════════════════════════════ */
 
+
+
     function toggleTheme() {
       document.body.classList.toggle("light-theme");
       const btn = document.getElementById("themeToggle");
@@ -2620,16 +2713,30 @@ Add Savings
       }
     })();
 
+    // ══════════════════════════════════════════════
+    // VOICE-ENABLED EXPENSE INPUT
+    // ══════════════════════════════════════════════
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+
+    if (SpeechRecognition) {
+      console.log("✅ Speech Recognition is supported in this browser");
+    } else {
+      console.warn("⚠️ Speech Recognition is NOT supported in this browser");
+
+
 
     // ══════════════════════════════════════════════
     // VOICE-ENABLED EXPENSE INPUT
     // ══════════════════════════════════════════════
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+
     if (SpeechRecognition) {
       console.log("✅ Speech Recognition is supported in this browser");
     } else {
       console.warn("⚠️ Speech Recognition is NOT supported in this browser");
+
     }
 
     let isListening = false;
@@ -2828,210 +2935,153 @@ async function chatSend() {
         `;
 
         console.log(err);
+
+
     }
 
-    messages.scrollTop = messages.scrollHeight;
-}
+    let isListening = false;
+    let recognition = null;
 
-function chatQuick(text){
-
-    document.getElementById(
-        "chatInput"
-    ).value = text;
-
-    chatSend();
-}
-
-/* ══════════════════════════════════════════════
-   VOICE-ENABLED EXPENSE INPUT
-══════════════════════════════════════════════ */
-
-// Check if browser supports Speech Recognition
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-if (SpeechRecognition) {
-    console.log("✅ Speech Recognition is supported in this browser");
-} else {
-    console.warn("⚠️ Speech Recognition is NOT supported in this browser");
-}
-
-let isListening = false;
-let recognition = null;
-
-function initVoiceRecognition() {
-    if (!SpeechRecognition) {
+    function initVoiceRecognition() {
+      if (!SpeechRecognition) {
         alert("❌ Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.");
         return null;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-IN';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      return recognition;
     }
-    
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    
-    return recognition;
-}
 
-function startVoiceInput() {
-    const voiceBtn = document.getElementById('voiceBtn');
-    
-    if (isListening) {
+    function startVoiceInput() {
+      const voiceBtn = document.getElementById('voiceBtn');
+      if (isListening) {
         stopVoiceInput();
         return;
-    }
-    
-    recognition = initVoiceRecognition();
-    if (!recognition) return;
-    
-    isListening = true;
-    voiceBtn.innerHTML = '⏹️';
-    voiceBtn.style.background = 'linear-gradient(135deg, #e05252, #c0392b)';
-    voiceBtn.title = 'Stop listening';
-    
-    const amountInput = document.getElementById('amount');
-    amountInput.placeholder = '🎤 Listening...';
-    amountInput.style.borderColor = '#d4a843';
-    
-    recognition.onresult = function(event) {
+      }
+      recognition = initVoiceRecognition();
+      if (!recognition) return;
+      isListening = true;
+      voiceBtn.innerHTML = '⏹️';
+      voiceBtn.style.background = 'linear-gradient(135deg, #e05252, #c0392b)';
+      voiceBtn.title = 'Stop listening';
+      const amountInput = document.getElementById('amount');
+      amountInput.placeholder = '🎤 Listening...';
+      amountInput.style.borderColor = '#d4a843';
+      
+      recognition.onresult = function(event) {
         const transcript = event.results[0][0].transcript;
         console.log('🎤 Transcript:', transcript);
         amountInput.placeholder = `🗣️ "${transcript}"`;
-        
         if (event.results[0].isFinal) {
-            parseVoiceText(transcript);
-            stopVoiceInput();
+          parseVoiceText(transcript);
+          stopVoiceInput();
         }
-    };
-    
-    recognition.onerror = function(event) {
+      };
+      
+      recognition.onerror = function(event) {
         console.error('🎤 Error:', event.error);
         let errorMsg = '🎤 Error: ';
         switch(event.error) {
-            case 'not-allowed':
-                errorMsg += 'Microphone permission denied. Please allow microphone access.';
-                break;
-            case 'no-speech':
-                errorMsg += 'No speech detected. Please try again.';
-                break;
-            case 'audio-capture':
-                errorMsg += 'No microphone found. Please connect a microphone.';
-                break;
-            default:
-                errorMsg += event.error;
+          case 'not-allowed': errorMsg += 'Microphone permission denied.'; break;
+          case 'no-speech': errorMsg += 'No speech detected.'; break;
+          case 'audio-capture': errorMsg += 'No microphone found.'; break;
+          default: errorMsg += event.error;
         }
         amountInput.placeholder = errorMsg;
         stopVoiceInput();
-    };
-    
-    recognition.onend = function() {
+      };
+      
+      recognition.onend = function() {
         if (isListening) {
-            stopVoiceInput();
+          stopVoiceInput();
         }
-    };
-    
-    try {
+      };
+      
+      try {
         recognition.start();
-    } catch (e) {
+      } catch (e) {
         console.error('🎤 Error starting:', e);
         stopVoiceInput();
+      }
     }
-}
 
-function stopVoiceInput() {
-    if (recognition) {
+    function stopVoiceInput() {
+      if (recognition) {
         try {
-            recognition.stop();
+          recognition.stop();
         } catch (e) {}
-    }
-    
-    isListening = false;
-    const voiceBtn = document.getElementById('voiceBtn');
-    voiceBtn.innerHTML = '🎤';
-    voiceBtn.style.background = '';
-    voiceBtn.title = 'Speak expense';
-    
-    const amountInput = document.getElementById('amount');
-    if (amountInput.placeholder === '🎤 Listening...' || amountInput.placeholder.includes('🗣️')) {
+      }
+      isListening = false;
+      const voiceBtn = document.getElementById('voiceBtn');
+      voiceBtn.innerHTML = '🎤';
+      voiceBtn.style.background = '';
+      voiceBtn.title = 'Speak expense';
+      const amountInput = document.getElementById('amount');
+      if (amountInput.placeholder === '🎤 Listening...' || amountInput.placeholder.includes('🗣️')) {
         amountInput.placeholder = 'Amount (₹)';
+      }
+      amountInput.style.borderColor = '';
     }
-    amountInput.style.borderColor = '';
-}
 
-async function parseVoiceText(text) {
-    try {
+    async function parseVoiceText(text) {
+      try {
         const response = await fetch('/api/parse-expense-text', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ text: text })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text })
         });
-        
         const data = await response.json();
-        
         if (data.success) {
-            if (data.amount) {
-                document.getElementById('amount').value = data.amount;
-            }
-            if (data.category) {
-                document.getElementById('category').value = data.category;
-            }
-            if (data.merchant) {
-                document.getElementById('merchant').value = data.merchant;
-            }
-            
-            highlightField('amount');
-            if (data.category) highlightField('category');
-            if (data.merchant) highlightField('merchant');
-            
-            const amountInput = document.getElementById('amount');
-            amountInput.placeholder = '✅ Voice input processed!';
-            setTimeout(() => {
-                amountInput.placeholder = 'Amount (₹)';
-            }, 2000);
-            
+          if (data.amount) { document.getElementById('amount').value = data.amount; }
+          if (data.category) { document.getElementById('category').value = data.category; }
+          if (data.merchant) { document.getElementById('merchant').value = data.merchant; }
+          highlightField('amount');
+          if (data.category) highlightField('category');
+          if (data.merchant) highlightField('merchant');
+          const amountInput = document.getElementById('amount');
+          amountInput.placeholder = '✅ Voice input processed!';
+          setTimeout(() => {
+            amountInput.placeholder = 'Amount (₹)';
+          }, 2000);
         } else {
-            document.getElementById('merchant').value = text;
-            alert(`🎤 Could not parse: "${text}". Please fill manually.`);
+          document.getElementById('merchant').value = text;
+          alert(`🎤 Could not parse: "${text}". Please fill manually.`);
         }
-    } catch (error) {
+      } catch (error) {
         console.error('🎤 Parse error:', error);
         document.getElementById('merchant').value = text;
         alert('🎤 Could not connect to server. Please fill manually.');
+      }
     }
-}
 
-function highlightField(fieldId) {
-    const field = document.getElementById(fieldId);
-    const originalBg = field.style.background;
-    const originalBorder = field.style.borderColor;
-    
-    field.style.background = 'rgba(46, 204, 138, 0.15)';
-    field.style.borderColor = '#2ecc8a';
-    field.style.transition = 'all 0.5s ease';
-    
-    setTimeout(() => {
+    function highlightField(fieldId) {
+      const field = document.getElementById(fieldId);
+      const originalBg = field.style.background;
+      const originalBorder = field.style.borderColor;
+      field.style.background = 'rgba(46, 204, 138, 0.15)';
+      field.style.borderColor = '#2ecc8a';
+      field.style.transition = 'all 0.5s ease';
+      setTimeout(() => {
         field.style.background = originalBg || '';
         field.style.borderColor = originalBorder || '';
-    }, 2000);
-}
-
-// Add event listener to voice button
-document.addEventListener('DOMContentLoaded', function() {
-    const voiceBtn = document.getElementById('voiceBtn');
-    if (voiceBtn) {
-        voiceBtn.addEventListener('click', startVoiceInput);
+      }, 2000);
     }
-});
 
-// --- REMOVED DUPLICATE CHATSEND ---
-</script>
-
+    document.addEventListener('DOMContentLoaded', function() {
+      const voiceBtn = document.getElementById('voiceBtn');
+      if (voiceBtn) {
+        voiceBtn.addEventListener('click', startVoiceInput);
+      }
+    });
   </script>
 
 </body>
 
 
 </body>
+
+
 </html>
