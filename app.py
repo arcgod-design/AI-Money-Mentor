@@ -39,7 +39,7 @@ from werkzeug.security import (
     check_password_hash
 )
 
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone
 
 from utils.portfolio_optimizer import PortfolioOptimizer
 from flask_mail import Mail, Message
@@ -72,6 +72,7 @@ from utils.validation import ValidationError, validate_string, validate_float, v
 from utils.safety_engine import SafetyEngine
 
 from utils.rag_system import RAGSystem
+from utils.fx import convert_to_base, get_rate
 
 app = Flask(__name__)
 
@@ -188,9 +189,7 @@ def process_recurring_expenses():
     
     try:
 
-       from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry
-
-        from models import RecurringExpense, Expense
+       from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone
 
         
         # Get all active recurring expenses due today
@@ -251,7 +250,7 @@ def process_recurring_expenses():
         print(f"❌ Error processing recurring expenses: {e}")
 
 # ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, FxRateCache, FinancialGoalMilestone
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -1585,10 +1584,12 @@ def add_expense():
         category = validate_string(data.get("category"), "category")
         amount   = validate_float(data.get("amount"),   "amount",   min_val=0.01)
         date     = validate_string(data.get("date"),    "date")
+        currency = validate_string(data.get("currency", "INR"), "currency")
  
         expense = Expense(
             category=category,
             amount=amount,
+            currency=currency,
             date=date,
             merchant=data.get("merchant", ""),
             user_id=current_user.id
@@ -1645,6 +1646,8 @@ def expense_detail(expense_id):
             )
         if "date" in data:
             expense.date = validate_string(data["date"], "date")
+        if "currency" in data:
+            expense.currency = validate_string(data["currency"], "currency")
  
         db.session.commit()
         return jsonify({"status": "success", "expense": expense.to_dict()})
@@ -1671,8 +1674,16 @@ def calculate():
             .order_by(Expense.id.desc())
             .all()
         )
+        converted_expense_data = []
+        for e in expense_rows:
+            converted_amount = convert_to_base(e.amount, e.currency)
+            converted_expense_data.append({
+                "category": e.category,
+                "amount": converted_amount
+            })
+            
         expense_data = [e.to_dict() for e in expense_rows]
-        result = calculate_expense(expense_data)
+        result = calculate_expense(converted_expense_data)
         result["expenses"] = expense_data
         return jsonify(result)
  
@@ -1696,11 +1707,17 @@ def expense_insights():
             .order_by(Expense.id.desc())
             .all()
         )
-        expense_data = [e.to_dict() for e in expense_rows]
+        converted_expense_data = []
+        for e in expense_rows:
+            converted_amount = convert_to_base(e.amount, e.currency)
+            converted_expense_data.append({
+                "category": e.category,
+                "amount": converted_amount
+            })
  
         # client is None when GROQ_API_KEY is missing —
         # insights() handles this and returns an offline message
-        result = insights(client, expense_data)
+        result = insights(client, converted_expense_data)
         return jsonify(result)
  
     except Exception as e:
@@ -1820,7 +1837,6 @@ def disable_recurring_expense(recurring_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-# ---------------- NET WORTH TRACKER ----------------
 @app.route("/net-worth", methods=["GET", "POST"])
 @login_required
 def get_net_worth():
@@ -1828,8 +1844,8 @@ def get_net_worth():
     liabilities = Liability.query.filter_by(user_id=current_user.id).order_by(Liability.id).all()
     assets_data = [a.to_dict() for a in assets]
     liabilities_data = [l.to_dict() for l in liabilities]
-    total_assets = sum(item['amount'] for item in assets_data)
-    total_liabilities = sum(item['amount'] for item in liabilities_data)
+    total_assets = sum(convert_to_base(item['amount'], item.get('currency', 'INR')) for item in assets_data)
+    total_liabilities = sum(convert_to_base(item['amount'], item.get('currency', 'INR')) for item in liabilities_data)
     return jsonify({
         "assets": assets_data,
         "liabilities": liabilities_data,
@@ -1847,11 +1863,12 @@ def add_asset():
             raise ValidationError("Request body must be a JSON object")
         name = validate_string(data.get("name"), "name")
         amount = validate_float(data.get("amount"), "amount", min_val=0.0)
+        currency = validate_string(data.get("currency", "INR"), "currency")
         date = data.get("date")
         if date:
             date = validate_string(date, "date")
         
-        asset = Asset(name=name, amount=amount, user_id=current_user.id)
+        asset = Asset(name=name, amount=amount, currency=currency, user_id=current_user.id)
         if date:
             asset.date = date
         db.session.add(asset)
@@ -1871,11 +1888,12 @@ def add_liability():
             raise ValidationError("Request body must be a JSON object")
         name = validate_string(data.get("name"), "name")
         amount = validate_float(data.get("amount"), "amount", min_val=0.0)
+        currency = validate_string(data.get("currency", "INR"), "currency")
         date = data.get("date")
         if date:
             date = validate_string(date, "date")
         
-        liability = Liability(name=name, amount=amount, user_id=current_user.id)
+        liability = Liability(name=name, amount=amount, currency=currency, user_id=current_user.id)
         if date:
             liability.date = date
         db.session.add(liability)
@@ -2082,9 +2100,6 @@ def disable_recurring_expense(recurring_id):
         return jsonify({"error": str(e)}), 400
 
 # ---------------- BUDGET THRESHOLD CHECKS ----------------
-
-# Helper to check budget thresholds
-
 def run_threshold_checks(user_id, category, year_month=None):
     if not year_month:
         import datetime
@@ -2100,8 +2115,9 @@ def run_threshold_checks(user_id, category, year_month=None):
         Expense.date.like(f"{year_month}%")
     ).all()
     
-    total_spent = sum(e.amount for e in expenses)
-    pct = total_spent / limit.limit_amount
+    total_spent = sum(convert_to_base(e.amount, e.currency) for e in expenses)
+    limit_amount_inr = convert_to_base(limit.limit_amount, limit.currency)
+    pct = total_spent / limit_amount_inr if limit_amount_inr > 0 else 0.0
     
     triggered = []
     for threshold in [100, 90, 80]:
@@ -2118,6 +2134,7 @@ def run_threshold_checks(user_id, category, year_month=None):
                     category=category,
                     year_month=year_month,
                     threshold=threshold,
+                    currency=limit.currency,
                     user_id=user_id
                 )
                 db.session.add(alert)
@@ -2138,12 +2155,14 @@ def budget_limits():
                 raise ValidationError("Request body must be a JSON object")
             category = validate_string(data.get("category"), "category")
             limit_amount = validate_float(data.get("limit_amount"), "limit_amount", min_val=0.0)
+            currency = validate_string(data.get("currency", "INR"), "currency")
             
             limit = BudgetLimit.query.filter_by(user_id=current_user.id, category=category).first()
             if limit:
                 limit.limit_amount = limit_amount
+                limit.currency = currency
             else:
-                limit = BudgetLimit(user_id=current_user.id, category=category, limit_amount=limit_amount)
+                limit = BudgetLimit(user_id=current_user.id, category=category, limit_amount=limit_amount, currency=currency)
                 db.session.add(limit)
             db.session.commit()
             return jsonify({"status": "success"})
@@ -2162,33 +2181,40 @@ def budget_status():
     year_month = request.args.get("month", datetime.datetime.now().strftime("%Y-%m"))
     
     limits = BudgetLimit.query.filter_by(user_id=current_user.id).all()
-    limits_dict = {l.category: l.limit_amount for l in limits}
+    limits_map = {l.category: (l.limit_amount, l.currency) for l in limits}
     
     expenses = Expense.query.filter(Expense.user_id == current_user.id, Expense.date.like(f"{year_month}%")).all()
     
-    spent_by_category = {}
+    spent_by_category_inr = {}
     for e in expenses:
-        spent_by_category[e.category] = spent_by_category.get(e.category, 0.0) + e.amount
+        spent_by_category_inr[e.category] = spent_by_category_inr.get(e.category, 0.0) + convert_to_base(e.amount, e.currency)
         
     status_list = []
-    all_categories = set(limits_dict.keys()) | set(spent_by_category.keys())
+    all_categories = set(limits_map.keys()) | set(spent_by_category_inr.keys())
+    
+    total_budgeted_inr = 0.0
+    total_spent_inr = sum(spent_by_category_inr.values())
     
     for cat in sorted(all_categories):
-        lim = limits_dict.get(cat, 0.0)
-        spent = spent_by_category.get(cat, 0.0)
-        pct = (spent / lim * 100) if lim > 0 else 0.0
+        lim_orig, lim_curr = limits_map.get(cat, (0.0, 'INR'))
+        lim_inr = convert_to_base(lim_orig, lim_curr)
+        total_budgeted_inr += lim_inr
+        
+        spent_inr = spent_by_category_inr.get(cat, 0.0)
+        pct = (spent_inr / lim_inr * 100) if lim_inr > 0 else 0.0
         status_list.append({
             "category": cat,
-            "limit_amount": lim,
-            "spent": spent,
+            "limit_amount": lim_orig,
+            "currency": lim_curr,
+            "spent": spent_inr,
             "percentage": round(pct, 2)
         })
         
     return jsonify({
         "month": year_month,
         "categories": status_list,
-        "total_budgeted": sum(limits_dict.values()),
-        "total_spent": sum(spent_by_category.values())
+        "total_budgeted": total_budgeted_inr,
+        "total_spent": total_spent_inr
     })
 
 @app.route("/budget/alerts", methods=["GET"])
@@ -2292,6 +2318,7 @@ def goals():
         name = validate_string(data.get("name"), "name")
         target_amount = validate_float(data.get("target_amount"), "target_amount", min_val=0.01)
         current_amount = validate_float(data.get("current_amount", 0.0), "current_amount", min_val=0.0)
+        currency = validate_string(data.get("currency", "INR"), "currency")
         target_date = validate_string(data.get("target_date"), "target_date")
 
         goal = FinancialGoal(
@@ -2299,6 +2326,7 @@ def goals():
             name=name,
             target_amount=target_amount,
             current_amount=current_amount,
+            currency=currency,
             target_date=target_date
         )
         db.session.add(goal)
@@ -2336,6 +2364,8 @@ def goal_detail(goal_id):
                 goal.target_amount = validate_float(data["target_amount"], "target_amount", min_val=0.01)
             if "current_amount" in data:
                 goal.current_amount = validate_float(data["current_amount"], "current_amount", min_val=0.0)
+            if "currency" in data:
+                goal.currency = validate_string(data["currency"], "currency")
             if "target_date" in data:
                 goal.target_date = validate_string(data["target_date"], "target_date")
             db.session.commit()
@@ -2430,8 +2460,9 @@ def run_threshold_checks(user_id, category, year_month=None):
         Expense.date.like(f"{year_month}%")
     ).all()
     
-    total_spent = sum(e.amount for e in expenses)
-    pct = total_spent / limit.limit_amount
+    total_spent = sum(convert_to_base(e.amount, e.currency) for e in expenses)
+    limit_amount_inr = convert_to_base(limit.limit_amount, limit.currency)
+    pct = total_spent / limit_amount_inr if limit_amount_inr > 0 else 0.0
     
     triggered = []
     for threshold in [100, 90, 80]:
@@ -2448,6 +2479,7 @@ def run_threshold_checks(user_id, category, year_month=None):
                     category=category,
                     year_month=year_month,
                     threshold=threshold,
+                    currency=limit.currency,
                     user_id=user_id
                 )
                 db.session.add(alert)
@@ -2468,12 +2500,14 @@ def budget_limits():
                 raise ValidationError("Request body must be a JSON object")
             category = validate_string(data.get("category"), "category")
             limit_amount = validate_float(data.get("limit_amount"), "limit_amount", min_val=0.0)
+            currency = validate_string(data.get("currency", "INR"), "currency")
             
             limit = BudgetLimit.query.filter_by(user_id=current_user.id, category=category).first()
             if limit:
                 limit.limit_amount = limit_amount
+                limit.currency = currency
             else:
-                limit = BudgetLimit(user_id=current_user.id, category=category, limit_amount=limit_amount)
+                limit = BudgetLimit(user_id=current_user.id, category=category, limit_amount=limit_amount, currency=currency)
                 db.session.add(limit)
             db.session.commit()
             return jsonify({"status": "success"})
@@ -2492,33 +2526,40 @@ def budget_status():
     year_month = request.args.get("month", datetime.datetime.now().strftime("%Y-%m"))
     
     limits = BudgetLimit.query.filter_by(user_id=current_user.id).all()
-    limits_dict = {l.category: l.limit_amount for l in limits}
+    limits_map = {l.category: (l.limit_amount, l.currency) for l in limits}
     
     expenses = Expense.query.filter(Expense.user_id == current_user.id, Expense.date.like(f"{year_month}%")).all()
     
-    spent_by_category = {}
+    spent_by_category_inr = {}
     for e in expenses:
-        spent_by_category[e.category] = spent_by_category.get(e.category, 0.0) + e.amount
+        spent_by_category_inr[e.category] = spent_by_category_inr.get(e.category, 0.0) + convert_to_base(e.amount, e.currency)
         
     status_list = []
-    all_categories = set(limits_dict.keys()) | set(spent_by_category.keys())
+    all_categories = set(limits_map.keys()) | set(spent_by_category_inr.keys())
+    
+    total_budgeted_inr = 0.0
+    total_spent_inr = sum(spent_by_category_inr.values())
     
     for cat in sorted(all_categories):
-        lim = limits_dict.get(cat, 0.0)
-        spent = spent_by_category.get(cat, 0.0)
-        pct = (spent / lim * 100) if lim > 0 else 0.0
+        lim_orig, lim_curr = limits_map.get(cat, (0.0, 'INR'))
+        lim_inr = convert_to_base(lim_orig, lim_curr)
+        total_budgeted_inr += lim_inr
+        
+        spent_inr = spent_by_category_inr.get(cat, 0.0)
+        pct = (spent_inr / lim_inr * 100) if lim_inr > 0 else 0.0
         status_list.append({
             "category": cat,
-            "limit_amount": lim,
-            "spent": spent,
+            "limit_amount": lim_orig,
+            "currency": lim_curr,
+            "spent": spent_inr,
             "percentage": round(pct, 2)
         })
         
     return jsonify({
         "month": year_month,
         "categories": status_list,
-        "total_budgeted": sum(limits_dict.values()),
-        "total_spent": sum(spent_by_category.values())
+        "total_budgeted": total_budgeted_inr,
+        "total_spent": total_spent_inr
     })
 
 @app.route("/budget/alerts", methods=["GET"])
@@ -3057,6 +3098,7 @@ def list_portfolio():
                 "name": h.name,
                 "quantity": h.quantity,
                 "buy_price": h.buy_price,
+                "currency": h.currency,
                 "current_price": current_price,
                 "invested_value": round(invested_val, 2),
                 "current_value": round(current_val, 2),
@@ -3067,10 +3109,10 @@ def list_portfolio():
                 "yoc": round(yoc, 2)
             })
             
-            total_invested += invested_val
-            total_current += current_val
-            total_dividends_received += divs_received
-            total_annual_dividends_value += annual_div_per_share * h.quantity
+            total_invested += convert_to_base(invested_val, h.currency)
+            total_current += convert_to_base(current_val, h.currency)
+            total_dividends_received += convert_to_base(divs_received, h.currency)
+            total_annual_dividends_value += convert_to_base(annual_div_per_share * h.quantity, h.currency)
             
             for d in divs:
                 try:
@@ -3082,7 +3124,8 @@ def list_portfolio():
                                 "date": projected_date.strftime("%Y-%m-%d"),
                                 "symbol": h.symbol,
                                 "amount_per_share": d["amount"],
-                                "amount": d["amount"] * h.quantity
+                                "amount": convert_to_base(d["amount"] * h.quantity, h.currency),
+                                "currency": h.currency
                             })
                 except ValueError:
                     continue
@@ -3136,6 +3179,8 @@ def add_portfolio_holding():
         if notes:
             notes = validate_string(notes, "notes")
 
+        currency = validate_string(data.get("currency", "INR"), "currency").strip().upper()
+
         stock = yf.Ticker(symbol)
         name = symbol
         try:
@@ -3165,6 +3210,7 @@ def add_portfolio_holding():
             quantity=quantity,
             buy_price=buy_price,
             buy_date=buy_date,
+            currency=currency,
             notes=notes
         )
         db.session.add(holding)

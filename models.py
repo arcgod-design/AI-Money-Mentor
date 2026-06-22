@@ -79,6 +79,7 @@ class Portfolio(db.Model):
     buy_date = db.Column(db.String(40), nullable=False)
     investment_type = db.Column(db.String(20), default="stock")
     notes = db.Column(db.String(200), nullable=True)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self, current_price=None):
@@ -95,6 +96,7 @@ class Portfolio(db.Model):
             "name": self.name,
             "quantity": self.quantity,
             "buy_price": self.buy_price,
+            "currency": self.currency,
             "buy_date": self.buy_date,
             "current_price": current_price,
             "current_value": round(current_value, 2),
@@ -175,12 +177,14 @@ class Expense(db.Model):
     is_recurring = db.Column(db.Boolean, default=False)
     is_anomaly = db.Column(db.Boolean, default=False)
     merchant_name = db.Column(db.String(200), nullable=True)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id,
             "category": self.category,
             "amount": self.amount,
+            "currency": self.currency,
             "date": self.date,
             "ai_confidence": self.ai_confidence,
             "user_corrected": self.user_corrected,
@@ -198,6 +202,7 @@ class Asset(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
     date = db.Column(db.String(40), nullable=False, default=lambda: datetime.utcnow().strftime("%Y-%m-%d"))
 
     def to_dict(self):
@@ -205,7 +210,7 @@ class Asset(db.Model):
         # row by stable PK rather than by positional list index. Using a
         # positional index was the root cause of the negative-index silent
         # deletion and out-of-range IndexError bugs (issue #125).
-        return {"id": self.id, "name": self.name, "amount": self.amount, "user_id": self.user_id, "date": self.date}
+        return {"id": self.id, "name": self.name, "amount": self.amount, "currency": self.currency, "user_id": self.user_id, "date": self.date}
 
 
 class Liability(db.Model):
@@ -215,11 +220,12 @@ class Liability(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
     date = db.Column(db.String(40), nullable=False, default=lambda: datetime.utcnow().strftime("%Y-%m-%d"))
 
     def to_dict(self):
         # Same fix as Asset.to_dict -- returns the real PK, not a list index.
-        return {"id": self.id, "name": self.name, "amount": self.amount, "user_id": self.user_id, "date": self.date}
+        return {"id": self.id, "name": self.name, "amount": self.amount, "currency": self.currency, "user_id": self.user_id, "date": self.date}
 
 
 class BudgetLimit(db.Model):
@@ -229,12 +235,14 @@ class BudgetLimit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(120), nullable=False)
     limit_amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id,
             "category": self.category,
             "limit_amount": self.limit_amount,
+            "currency": self.currency,
             "user_id": self.user_id
         }
 
@@ -247,6 +255,7 @@ class BudgetAlert(db.Model):
     category = db.Column(db.String(120), nullable=False)
     year_month = db.Column(db.String(7), nullable=False)  # e.g., "2026-06"
     threshold = db.Column(db.Integer, nullable=False)    # 80, 90, or 100
+    currency = db.Column(db.String(10), default='INR', nullable=False)
     triggered_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -256,6 +265,7 @@ class BudgetAlert(db.Model):
             "year_month": self.year_month,
             "threshold": self.threshold,
             "triggered_at": self.triggered_at.isoformat(),
+            "currency": self.currency,
             "user_id": self.user_id
         }
 
@@ -266,6 +276,7 @@ class FinancialGoal(db.Model):
     name = db.Column(db.String(120), nullable=False)
     target_amount = db.Column(db.Float, nullable=False)
     current_amount = db.Column(db.Float, nullable=False, default=0.0)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
     target_date = db.Column(db.String(10), nullable=False)  # YYYY-MM
 
     # Optional AI-generated plan/tactics
@@ -281,6 +292,7 @@ class FinancialGoal(db.Model):
             "name": self.name,
             "target_amount": self.target_amount,
             "current_amount": self.current_amount,
+            "currency": self.currency,
             "progress_percent": round(progress_percent, 2),
             "target_date": self.target_date,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -333,6 +345,22 @@ class WeeklyDigestLog(db.Model):
             "snapshot_net_worth_end": self.snapshot_net_worth_end,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+class FxRateCache(db.Model):
+    __tablename__ = "fx_rate_cache"
+    id = db.Column(db.Integer, primary_key=True)
+    from_currency = db.Column(db.String(10), nullable=False)
+    to_currency = db.Column(db.String(10), nullable=False)
+    rate = db.Column(db.Float, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class FinancialGoalMilestone(db.Model):
+    __tablename__ = "financial_goal_milestones"
+    id = db.Column(db.Integer, primary_key=True)
+    goal_id = db.Column(db.Integer, db.ForeignKey("financial_goals.id"), nullable=False)
+    month = db.Column(db.String(7), nullable=False)  # e.g., "2026-06"
+    target_amount_for_month = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), default="planned")  # planned, completed
 
 # ============================================
 # LEDGER SYSTEM MODELS
