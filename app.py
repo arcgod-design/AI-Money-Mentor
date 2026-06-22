@@ -39,6 +39,8 @@ from werkzeug.security import (
     check_password_hash
 )
 
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry
+
 from utils.portfolio_optimizer import PortfolioOptimizer
 from flask_mail import Mail, Message
 # Load environment variables from .env file (if present)
