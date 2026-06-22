@@ -3,3 +3,154 @@
 {% block title %}Expense Tracker{% endblock %}
 
 {% block content %}
+<div id="expense-tracker" class="page active center-page">
+    <div class="card fade-up">
+        <div class="page-title">
+            Expense <span>Tracker</span>
+        </div>
+        <p style="color:var(--muted); font-size:13px; margin-bottom: 24px;">Log your daily expenses and keep your budget in check.</p>
+
+        <form id="expenseForm">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div>
+                    <label style="font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block;">Amount (₹)</label>
+                    <input type="number" id="expAmount" placeholder="e.g. 500" required>
+                </div>
+                <div>
+                    <label style="font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block;">Category</label>
+                    <select id="expCategory" required>
+                        <option value="Food">Food & Dining</option>
+                        <option value="Transport">Transportation</option>
+                        <option value="Shopping">Shopping</option>
+                        <option value="Utilities">Bills & Utilities</option>
+                        <option value="Entertainment">Entertainment</option>
+                        <option value="Health">Health & Fitness</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                <div>
+                    <label style="font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block;">Date</label>
+                    <input type="date" id="expDate" required>
+                </div>
+                <div>
+                    <label style="font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block;">Merchant (Optional)</label>
+                    <input type="text" id="expMerchant" placeholder="e.g. Starbucks">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-gold" id="saveExpenseBtn" style="width: 100%;">Add Expense</button>
+            <div id="expStatus" style="margin-top: 12px; font-size: 13px; text-align: center;"></div>
+        </form>
+
+        <hr style="border-color: rgba(255,255,255,0.05); margin: 30px 0;">
+
+        <div class="card-title" style="margin-bottom: 12px;">🕒 Recent Expenses</div>
+        <div id="recentExpensesList" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto;">
+            <div style="text-align: center; color: var(--muted); padding: 20px; font-size: 13px;">Loading recent expenses...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Set today's date
+        document.getElementById('expDate').valueAsDate = new Date();
+        loadRecentExpenses();
+
+        document.getElementById('expenseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('saveExpenseBtn');
+            const status = document.getElementById('expStatus');
+            const originalText = btn.innerHTML;
+            
+            const payload = {
+                amount: parseFloat(document.getElementById('expAmount').value),
+                category: document.getElementById('expCategory').value,
+                date: document.getElementById('expDate').value,
+                merchant: document.getElementById('expMerchant').value
+            };
+
+            btn.innerHTML = 'Saving...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/add_expense', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.ok) {
+                    status.style.color = 'var(--green)';
+                    status.innerHTML = '✅ Expense added successfully!';
+                    document.getElementById('expenseForm').reset();
+                    document.getElementById('expDate').valueAsDate = new Date();
+                    loadRecentExpenses();
+                } else {
+                    const data = await res.json();
+                    status.style.color = 'var(--red)';
+                    status.innerHTML = '❌ ' + (data.error || 'Failed to add expense');
+                }
+            } catch (err) {
+                status.style.color = 'var(--red)';
+                status.innerHTML = '❌ Network error';
+            }
+
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            
+            setTimeout(() => { status.innerHTML = ''; }, 3000);
+        });
+    });
+
+    async function loadRecentExpenses() {
+        const list = document.getElementById('recentExpensesList');
+        try {
+            const res = await fetch('/api/expenses'); // Need to fetch from dashboard data or similar
+            if (!res.ok) throw new Error('Failed to load');
+            const data = await res.json();
+            
+            if (!data.expenses || data.expenses.length === 0) {
+                list.innerHTML = '<div style="text-align: center; color: var(--muted); padding: 20px; font-size: 13px;">No expenses logged yet.</div>';
+                return;
+            }
+
+            list.innerHTML = data.expenses.map(exp => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="color: var(--text); font-weight: 600; font-size: 14px;">${exp.category} ${exp.merchant_name ? `<span style="color:var(--muted); font-weight:400; font-size:12px;">• ${exp.merchant_name}</span>` : ''}</span>
+                        <span style="color: var(--muted); font-size: 11px;">${exp.date}</span>
+                    </div>
+                    <span style="color: var(--red); font-weight: 700; font-family: 'Times New Roman', Times, serif;">-₹${exp.amount.toLocaleString()}</span>
+                </div>
+            `).join('');
+        } catch (err) {
+            // Fallback to dashboard data API which has expenses
+            try {
+                const res = await fetch('/dashboard-data');
+                const data = await res.json();
+                if (data.monthly_expenses && data.monthly_expenses.length > 0) {
+                    list.innerHTML = data.monthly_expenses.map(exp => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="color: var(--text); font-weight: 600; font-size: 14px;">${exp.category} ${exp.merchant_name ? `<span style="color:var(--muted); font-weight:400; font-size:12px;">• ${exp.merchant_name}</span>` : ''}</span>
+                                <span style="color: var(--muted); font-size: 11px;">${exp.date}</span>
+                            </div>
+                            <span style="color: var(--red); font-weight: 700; font-family: 'Times New Roman', Times, serif;">-₹${exp.amount.toLocaleString()}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = '<div style="text-align: center; color: var(--muted); padding: 20px; font-size: 13px;">No expenses logged yet.</div>';
+                }
+            } catch(e) {
+                list.innerHTML = '<div style="text-align: center; color: var(--red); padding: 20px; font-size: 13px;">Could not load recent expenses.</div>';
+            }
+        }
+    }
+</script>
+{% endblock %}
