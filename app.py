@@ -41,6 +41,10 @@ from werkzeug.security import (
 
 from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule
 
+
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry
+
+
 from utils.portfolio_optimizer import PortfolioOptimizer
 from flask_mail import Mail, Message
 # Load environment variables from .env file (if present)
@@ -894,6 +898,7 @@ def couple_dashboard():
         result = couple_manager.get_couple_dashboard(current_user.id)
         return jsonify(result)
     except Exception as e:
+
         return jsonify({'error': str(e)}), 500
 
       # ---------------- PREDICTIVE FINANCIAL MODELS ----------------
@@ -1214,6 +1219,9 @@ def get_sync_status():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+        return jsonify({'error': str(e)}), 500  
+
 
 # ---------------- PORTFOLIO OPTIMIZER ----------------
 
