@@ -138,7 +138,7 @@ def get_stock_dividends(symbol):
         return []
 #-------stock predictor --------#
 try:
-  model=joblib.load("filename")
+  model=joblib.load("stock_xgb")
   print("Imported")
 except:
     model=None
