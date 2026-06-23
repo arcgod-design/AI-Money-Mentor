@@ -2531,13 +2531,10 @@ def expense_detail(expense_id):
             )
         if "date" in data:
             expense.date = validate_string(data["date"], "date")
-<<<<<<< HEAD
-            
-        expense.user_corrected = True
-=======
         if "currency" in data:
             expense.currency = validate_string(data["currency"], "currency")
->>>>>>> upstream/main
+            
+        expense.user_corrected = True
  
         db.session.commit()
         return jsonify({"status": "success", "expense": expense.to_dict()})
@@ -3116,8 +3113,7 @@ def persist_goal_milestones(goal, milestones):
         ))
     db.session.commit()
 
-<<<<<<< HEAD
-=======
+
 def check_goal_milestones(goal):
     if goal.target_amount <= 0:
         return
@@ -3144,7 +3140,7 @@ def check_goal_milestones(goal):
                 db.session.add(notification)
     db.session.commit()
 
->>>>>>> upstream/main
+
 @app.route("/goals", methods=["GET", "POST"])
 @login_required
 def goals():
@@ -3157,10 +3153,7 @@ def goals():
         name = validate_string(data.get("name"), "name")
         target_amount = validate_float(data.get("target_amount"), "target_amount", min_val=0.01)
         current_amount = validate_float(data.get("current_amount", 0.0), "current_amount", min_val=0.0)
-<<<<<<< HEAD
-=======
         currency = validate_string(data.get("currency", "INR"), "currency")
->>>>>>> upstream/main
         target_date = validate_string(data.get("target_date"), "target_date")
 
         goal = FinancialGoal(
@@ -3168,10 +3161,7 @@ def goals():
             name=name,
             target_amount=target_amount,
             current_amount=current_amount,
-<<<<<<< HEAD
-=======
             currency=currency,
->>>>>>> upstream/main
             target_date=target_date
         )
         db.session.add(goal)
@@ -3179,10 +3169,7 @@ def goals():
 
         milestones = compute_monthly_milestones(goal)
         persist_goal_milestones(goal, milestones)
-<<<<<<< HEAD
-=======
         check_goal_milestones(goal)
->>>>>>> upstream/main
 
         return jsonify({"status": "success", "goal": goal.to_dict()})
     except ValidationError as e:
@@ -3213,21 +3200,15 @@ def goal_detail(goal_id):
                 goal.target_amount = validate_float(data["target_amount"], "target_amount", min_val=0.01)
             if "current_amount" in data:
                 goal.current_amount = validate_float(data["current_amount"], "current_amount", min_val=0.0)
-<<<<<<< HEAD
-=======
             if "currency" in data:
                 goal.currency = validate_string(data["currency"], "currency")
->>>>>>> upstream/main
             if "target_date" in data:
                 goal.target_date = validate_string(data["target_date"], "target_date")
             db.session.commit()
 
             milestones = compute_monthly_milestones(goal)
             persist_goal_milestones(goal, milestones)
-<<<<<<< HEAD
-=======
             check_goal_milestones(goal)
->>>>>>> upstream/main
 
             return jsonify({"status": "success", "goal": goal.to_dict()})
     except ValidationError as e:
@@ -3281,8 +3262,7 @@ def get_goals():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-<<<<<<< HEAD
-=======
+
 # ---------------- PERSONAL FINANCE MILESTONES & SIP ----------------
 def check_sip_due_reminders():
     with app.app_context():
@@ -3428,7 +3408,7 @@ def pay_sip_installment(schedule_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
->>>>>>> upstream/main
+
 # ---------------- SCHEDULER ----------------
 def check_all_budgets_job():
     with app.app_context():
