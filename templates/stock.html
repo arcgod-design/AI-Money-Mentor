@@ -274,17 +274,13 @@
               <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">XGBoost Target Estimate</div>
               <div class="result-big" style="color: #14c8bf; margin: 4px 0 0 0;">${predPrice}</div>
             </div>
-            <div style="flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; font-size: 13px; border-left: 1px solid var(--border); padding-left: 4px;">
-              <div style="display:flex; justify-content:space-between; padding: 0 20px;">
-                <span style="color:var(--muted);">Expected Shift:</span>
-                <strong style="color: ${returnColor};">${returnSign}${returnPct}%</strong>
-              </div>
-              <div style="display:flex; justify-content:space-between; padding: 0 20px;">
+  
+            <div style="display:flex; justify-content:space-between; padding: 0 20px;">
                 <span style="color:var(--muted);">Confidence Interval:</span>
                 <strong>±2.0% MAE</strong>
               </div>
             </div>
-          </div>
+          
           <div style="font-size: 11px; color: var(--muted); margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
             *Calculated relative to closing technical factors. Validated testing evaluation metric: R² = 0.26.
           </div>
