@@ -1037,7 +1037,7 @@ def predictor_status():
         'model_dir': predictor.model_dir
     })    
 
-        return jsonify({'error': str(e)}), 500  
+    return jsonify({'error': str(e)}), 500  
 
 
 
