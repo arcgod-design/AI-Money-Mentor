@@ -747,7 +747,10 @@ def couple_unlink():
 
 @app.route('/api/couple/goals', methods=['GET'])
 @login_required
+
+def get_goals():
 def get_couple_goals():
+
     """Get shared goals"""
     try:
         status = couple_manager.get_couple_status(current_user.id)
@@ -1109,6 +1112,9 @@ def fire_quick():
     except Exception as e:
         return jsonify({'error': str(e)}), 500 
 
+      ]
+
+
         # ---------------- BANK INTEGRATION ----------------
 from utils.bank_integration import BankIntegration
 
@@ -1229,11 +1235,13 @@ def get_sync_status():
 
         return jsonify({'error': str(e)}), 500  
 
+
     })    
 
     return jsonify({'error': str(e)}), 500  
 
 
+  ]
 
 
 # ---------------- PORTFOLIO OPTIMIZER ----------------

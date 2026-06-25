@@ -975,6 +975,7 @@ class CoupleAlert(db.Model):
             'message': self.message,
             'is_read': self.is_read,
             'created_at': self.created_at.isoformat() if self.created_at else None
+
         }
 
 
@@ -1079,6 +1080,7 @@ class FraudAlert(db.Model):
             'is_resolved': self.is_resolved,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }     
+
 
 
 class MilestoneNotification(db.Model):
