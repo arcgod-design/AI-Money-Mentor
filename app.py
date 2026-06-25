@@ -418,6 +418,169 @@ def export_parsed_expenses():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+        # ---------------- MFA SYSTEM ----------------
+from utils.mfa_system import MFASystem
+
+@app.route('/security-settings')
+@login_required
+def security_settings_page():
+    """Security Settings Page"""
+    return render_template('security_settings.html', active_page='security_settings')
+
+@app.route('/api/mfa/status', methods=['GET'])
+@login_required
+def mfa_status():
+    """Get MFA status"""
+    try:
+        mfa = MFASystem(current_user)
+        status = mfa.get_mfa_status()
+        return jsonify({'success': True, 'status': status})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/totp/setup', methods=['GET'])
+@login_required
+def mfa_totp_setup():
+    """Setup TOTP"""
+    try:
+        mfa = MFASystem(current_user)
+        result = mfa.setup_totp()
+        return jsonify({
+            'success': True,
+            'secret': result['secret'],
+            'qr_code': result['qr_code'],
+            'backup_codes': result['backup_codes']
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/totp/verify', methods=['POST'])
+@login_required
+def mfa_totp_verify():
+    """Verify TOTP code"""
+    try:
+        data = request.json
+        code = data.get('code')
+        
+        if not code:
+            return jsonify({'error': 'Code is required'}), 400
+        
+        mfa = MFASystem(current_user)
+        if mfa.verify_totp(code):
+            return jsonify({'success': True, 'message': 'TOTP verified and enabled'})
+        else:
+            return jsonify({'error': 'Invalid code'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/webauthn/setup', methods=['GET'])
+@login_required
+def mfa_webauthn_setup():
+    """Setup WebAuthn"""
+    try:
+        mfa = MFASystem(current_user)
+        result = mfa.setup_webauthn()
+        return jsonify({
+            'success': True,
+            'options': result['options']
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/webauthn/verify', methods=['POST'])
+@login_required
+def mfa_webauthn_verify():
+    """Verify WebAuthn registration"""
+    try:
+        data = request.json
+        mfa = MFASystem(current_user)
+        
+        if mfa.verify_webauthn(data):
+            return jsonify({'success': True, 'message': 'WebAuthn verified'})
+        else:
+            return jsonify({'error': 'Verification failed'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/devices', methods=['GET'])
+@login_required
+def mfa_get_devices():
+    """Get trusted devices"""
+    try:
+        mfa = MFASystem(current_user)
+        devices = mfa.get_trusted_devices()
+        return jsonify({'success': True, 'devices': devices})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/devices/add', methods=['POST'])
+@login_required
+def mfa_add_device():
+    """Add trusted device"""
+    try:
+        data = request.json
+        device_name = data.get('device_name')
+        
+        if not device_name:
+            return jsonify({'error': 'Device name is required'}), 400
+        
+        mfa = MFASystem(current_user)
+        device = mfa.add_trusted_device(
+            device_name,
+            request.headers.get('User-Agent'),
+            request.remote_addr
+        )
+        
+        return jsonify({'success': True, 'device': device.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/devices/remove/<int:device_id>', methods=['DELETE'])
+@login_required
+def mfa_remove_device(device_id):
+    """Remove trusted device"""
+    try:
+        mfa = MFASystem(current_user)
+        if mfa.remove_trusted_device(device_id):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Device not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/backup-codes', methods=['POST'])
+@login_required
+def mfa_generate_backup_codes():
+    """Generate backup codes"""
+    try:
+        mfa = MFASystem(current_user)
+        codes = mfa.generate_new_backup_codes()
+        return jsonify({'success': True, 'codes': codes})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/security-events', methods=['GET'])
+@login_required
+def mfa_security_events():
+    """Get security events"""
+    try:
+        mfa = MFASystem(current_user)
+        events = mfa.get_security_events()
+        return jsonify({'success': True, 'events': events})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mfa/disable', methods=['POST'])
+@login_required
+def mfa_disable():
+    """Disable MFA"""
+    try:
+        mfa = MFASystem(current_user)
+        if mfa.disable_mfa():
+            return jsonify({'success': True, 'message': 'MFA disabled'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
         
 # ---------------- RETIREMENT ----------------
 @app.route('/retirement')
