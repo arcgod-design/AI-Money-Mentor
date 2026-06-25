@@ -40,7 +40,7 @@ def financial_check(emi, income):
   return {"Ratio":ratio,"Zone":zone}
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY", "YOUR_API_KEY"))
-
+message=data_input(principal, rate, time, income)
 
 def financial_advice(message):
     try:
@@ -55,7 +55,7 @@ def financial_advice(message):
         return res.choices[0].message.content
 
     except Exception as e:
-        print("🔥 GROQ ERROR:", e)   # IMPORTANT
+        print("🔥 GROQ ERROR:", e)  
         return "AI service is currently unavailable."
 
   
