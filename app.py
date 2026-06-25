@@ -2569,7 +2569,115 @@ def analyze_ratios():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+        # ---------------- DASHBOARD WIDGETS ----------------
+from utils.dashboard_widgets import DashboardWidgetManager
+
+@app.route('/dashboard-new')
+@login_required
+def dashboard_new():
+    """Customizable Dashboard"""
+    return render_template('dashboard_new.html', active_page='dashboard_new')
+
+@app.route('/api/dashboard/layouts', methods=['POST'])
+@login_required
+def save_dashboard_layout():
+    try:
+        data = request.json
+        layout_id = data.get('layout_id', 'default')
+        widgets = data.get('widgets', [])
         
+        manager = DashboardWidgetManager(current_user.id)
+        result = manager.save_layout(layout_id, widgets)
+        
+        return jsonify({
+            'success': True,
+            'layout': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/layouts', methods=['GET'])
+@login_required
+def get_dashboard_layouts():
+    try:
+        manager = DashboardWidgetManager(current_user.id)
+        return jsonify({
+            'success': True,
+            'layouts': manager.get_layouts()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/widget/<widget_id>', methods=['GET'])
+@login_required
+def get_widget_data(widget_id):
+    try:
+        # Fetch user data from database
+        # For demo, return sample data
+        sample_data = {
+            'net_worth': {
+                'total_assets': 1500000,
+                'total_liabilities': 400000,
+                'net_worth': 1100000,
+                'change': 12.5
+            },
+            'spending_trend': {
+                'current_month': 45000,
+                'previous_month': 52000,
+                'trend': [12000, 11000, 9500, 8000, 4500],
+                'change_percent': -13.5
+            },
+            'budget_health': {
+                'total_budget': 60000,
+                'total_spent': 45000,
+                'remaining': 15000,
+                'health_percent': 75,
+                'categories': [
+                    {'name': 'Food', 'spent': 12000, 'budget': 15000},
+                    {'name': 'Transport', 'spent': 8000, 'budget': 10000},
+                    {'name': 'Shopping', 'spent': 5000, 'budget': 8000}
+                ]
+            },
+            'recent_transactions': {
+                'transactions': [
+                    {'category': 'Food', 'date': '2026-06-24', 'amount': -450},
+                    {'category': 'Rent', 'date': '2026-06-23', 'amount': -12000},
+                    {'category': 'Salary', 'date': '2026-06-22', 'amount': 50000},
+                    {'category': 'Transport', 'date': '2026-06-21', 'amount': -300}
+                ]
+            },
+            'portfolio_summary': {
+                'total_value': 500000,
+                'returns': 8.5,
+                'holdings': [
+                    {'symbol': 'AAPL', 'value': 150000, 'percent': 30},
+                    {'symbol': 'GOOGL', 'value': 120000, 'percent': 24},
+                    {'symbol': 'TSLA', 'value': 100000, 'percent': 20}
+                ]
+            },
+            'goals_progress': {
+                'goals': [
+                    {'name': 'Vacation', 'target': 200000, 'current': 120000, 'progress': 60},
+                    {'name': 'Emergency Fund', 'target': 300000, 'current': 200000, 'progress': 67},
+                    {'name': 'Car', 'target': 500000, 'current': 250000, 'progress': 50}
+                ]
+            },
+            'cash_flow': {
+                'income': 80000,
+                'expenses': 45000,
+                'net': 35000
+            }
+        }
+        
+        data = sample_data.get(widget_id, {'message': 'No data available'})
+        return jsonify({
+            'success': True,
+            'data': data
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 # ---------------- API ALERTS ----------------
 @app.route("/api/alerts", methods=["GET"])
 @login_required
