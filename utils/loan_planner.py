@@ -1,6 +1,7 @@
 from groq import Groq
 import os
 from dotenv import load_dotenv
+import json
 
 # Load environment variables
 load_dotenv()
@@ -12,7 +13,7 @@ def data_input(principal, rate, time, income):
   return {"Loan_Amount":loan_calc.get("Amount",0),
           "Loan_Interest":loan_calc.get("Interest",0),
           "EMI":emi,
-          "Net_take_home":emi_calc.get("Net_take_income",0),
+          "Net_take_income":emi_calc.get("Net_take_home",0),
           "Ratio":check.get("Ratio",0),
           "Zone":check.get("Zone",0)
   }
@@ -23,10 +24,10 @@ def compound_interest_calculation(principal, rate, time):#rate per annum, time i
   return {"Amount":amt,"Interest":interest}
 
 def emi_calculation(principal, rate, time, income):
-  m_rate=rate/12*100
+  m_rate=rate/12
   m_time=time*12
   try:
-    emi= (principal* m_rate *(1+m_rate)**m_time))/((1+m_rate)**m_time)-1)
+    emi= (principal* m_rate *(1+m_rate/100)**m_time))/(((1+m_rate/100)**m_time)-1)
   except Exception as e:
     emi=0
   net=income-emi
@@ -47,7 +48,7 @@ message=data_input(principal, rate, time, income)
 
 def financial_advice(message):
     try:
-        user_prompt_string = json.dumps(metrics_dict, indent=2)
+        user_prompt_string = json.dumps(message, indent=2)
         res = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
