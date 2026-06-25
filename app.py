@@ -2539,6 +2539,37 @@ def recent_activity():
     activities = sorted(activities, key=lambda x: x["date"], reverse=True)
     return jsonify(activities[:10])
 
+# ---------------- FINANCIAL RATIO ANALYZER ----------------
+from utils.financial_ratio_analyzer import FinancialRatioAnalyzer
+
+@app.route('/ratio-analyzer')
+@login_required
+def ratio_analyzer_page():
+    """Financial Ratio Analysis Dashboard"""
+    return render_template('ratio_analyzer.html', active_page='ratio_analyzer')
+
+@app.route('/api/ratios/analyze', methods=['POST'])
+@login_required
+def analyze_ratios():
+    """Analyze financial ratios"""
+    try:
+        data = request.json
+        financial_data = data.get('financial_data', {})
+        industry = data.get('industry', 'general')
+        
+        # Create analyzer
+        analyzer = FinancialRatioAnalyzer(financial_data)
+        
+        # Generate report
+        report = analyzer.generate_report(industry)
+        
+        return jsonify({
+            'success': True,
+            'data': report
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+        
 # ---------------- API ALERTS ----------------
 @app.route("/api/alerts", methods=["GET"])
 @login_required
