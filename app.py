@@ -596,6 +596,10 @@ def networth():
 def budget():
     return render_template("budget.html", active_page="budget")
 
+@app.route("/loan_planner", methods=["GET"])
+def loan():
+    return render_template("loan_planner.html", active_page="loan_planner")
+
 # ---------------- RETIREMENT ----------------
 @app.route('/retirement')
 def retirement():
