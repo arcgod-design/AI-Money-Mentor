@@ -20,22 +20,22 @@
       <input type="number" required min="0" id="time" placeholder="e.g. 10">
 
       <label>Monthly Income (₹)</label>
-      <input type="number" min="0" id="income" placeholder="e.g. 6" value="6" style="margin-bottom:12px;">
+      <input type="number" min="0" id="income" placeholder="e.g. 60000" style="margin-bottom:12px;">
 
       <div style="display:flex;gap:10px;margin-top:16px;">
         <button class="btn btn-gold" style="flex:1" onclick="calcLoan()" id="Btn">Calculate</button>
         <button class="btn btn-ghost" style="flex:1" onclick="resetLoan()" id="ResetBtn">Reset</button>
       </div>
     </div>
-  </div>
+  
   
   <div class="card" style="min-height: 380px;">
     <div class="card-title">Loan Repayment Graph</div>
       <div style="position: relative; height: 320px;">
         <canvas id="Chart"></canvas>
       </div>
-    </div>
   </div>
+</div>
 
 <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
     <div class="card" style="box-sizing: border-box;">
@@ -119,7 +119,7 @@ async function load_data(inputs) {
     const zone=data.Zone;
     const advice=data.Advice;
     
-    let aiHtml=`<div style="color: var(--muted); font-size: 14px; margin: 0;
+    let aiHtml=`<div style="color: var(--muted); font-size: 14px; margin: 0;">
      ${advice}
     </div>`;
     document.getElementById("aiPredictionResult").innerHTML=aiHtml;
@@ -162,8 +162,7 @@ async function load_data(inputs) {
     let balances=[];
     let P = parseFloat(loan_amt);                  
     let R = parseFloat(inputs.rate_front) / 100;    
-    let N = parseInt(inputs.time_front);
-    let yearly_principal_payment = P / N; 
+    let N = parseInt(inputs.time_front); 
     let currentBalance = P;
 
     for (let i = 1; i <= N; i++) {
@@ -171,14 +170,9 @@ async function load_data(inputs) {
   
     let interest_for_year = currentBalance * R;
   
-     currentBalance = (currentBalance + interest_for_year) - (yearly_principal_payment + interest_for_year);
-  
-    let dynamic_remaining = P * Math.pow(1 + R, i) - (yearly_principal_payment * ((Math.pow(1 + R, i) - 1) / R));
-  
-    if (i === N || dynamic_remaining < 0) {
-      dynamic_remaining = 0;
-    }
-    balances.push(Math.round(dynamic_remaining));
+     currentBalance = (currentBalance + interest_for_year);
+
+     balances.push(Math.round(currentBalance));
     }
 
     if (loanChart) {
@@ -190,7 +184,7 @@ async function load_data(inputs) {
     data: {
     labels: years,     
     datasets: [{
-      label: 'Remaining Balance',
+      label: 'Amount',
       data: balances,  
       borderColor: '#d4af37'
     }]
