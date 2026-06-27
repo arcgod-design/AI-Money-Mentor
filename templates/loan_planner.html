@@ -47,6 +47,7 @@
         </p>
       </div>
     </div>
+  
   <div class="card" style=" box-sizing: border-box;">
       <div class="card-title" style="color: var(--gold); margin-bottom: 6px;">Reliability Score</div>
       <div id="Reliability">
@@ -75,35 +76,42 @@
 <script>
 async function send_data() {
   const principal_front=document.getElementById("principal");
-  const rate_front=document.getElemenfById("rate");
-  const time_front=document.getElemenfById("time");
-  const income_front=document.getElemenfById("income");
-  if {principal_front||rate_front||time_front||income} {
-    showResult('Btn","⚠ Fill in all fields.");
+  const rate_front=document.getElementById("rate");
+  const time_front=document.getElementById("time");
+  const income_front=document.getElementById("income");
+  if {!principal_front||!rate_front||!time_front||!income} {
+    showResult("⚠ Fill in all fields.");
       return;
   }
+  return { principal_front, rate_front, time_front, income_front };
 }
-async function load_data() {
-  try {
+async function load_data(inputs) {
+  try{
       const data = await apiFetch('/loan_planner', {
-        principal: parseFloat(principal_front),
-        rate: parseFloat(rate_front),
-        time: parseFloat(time_front),
-        income: parseFloat(income_front),
-        
-      if (data.error) {
-        showResult("Btn",`⚠ ${data.error}`);
+        principal: parseFloat(inputs.principal_front),
+        rate: parseFloat(inputs.rate_front),
+        time: parseFloat(inputs.time_front),
+        income: parseFloat(inputs.income_front)
       });
-      }else {
-        const loan_amt=data.Loan_Amount;
-        const loan_int=data.Loan_Interest;
-        const emi=data.EMI;
-        const net_income=data.Net_take_income;
-        const ratio=data.Ratio;
-        const zone=data.Zone;
-        const advice=data.Advice
+          
+      if (data.error) {
+        showResult(`⚠ ${data.error}`);
+      });
+      }else { return data;
       }
+  }catch(error) {
+    console.error("API Error:", error);
+    return null;
+  }
 }
+  const loan_amt=data.Loan_Amount;
+  const loan_int=data.Loan_Interest;
+  const emi=data.EMI;
+  const net_income=data.Net_take_income;
+  const ratio=data.Ratio;
+  const zone=data.Zone;
+  const advice=data.Advice;
+  
   async function loan_calc(){
     let aiHTML=`<div style="margin-top: 20px; max-width: 900px;">
     <div class="card" style="width: 100%; box-sizing: border-box;">
