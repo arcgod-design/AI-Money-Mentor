@@ -611,8 +611,10 @@ def loan():
             return jsonify(result)
         except Exception as e:
             return jsonify({"error": str(e)}), 400
+    
+     print("Working")
 
-    return render_template("loan_planner.html", active_page="loan")
+     return render_template("loan_planner.html", active_page="loan")
 
 # ---------------- RETIREMENT ----------------
 @app.route('/retirement')
