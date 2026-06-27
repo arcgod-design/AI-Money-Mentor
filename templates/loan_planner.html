@@ -160,7 +160,7 @@ async function load_data(inputs) {
 
     let years=[];
     let balances=[];
-    let P = parseFloat(loan_amt);                  
+    let P = parseFloat(inputs.principal_front);                  
     let R = parseFloat(inputs.rate_front) / 100;    
     let N = parseInt(inputs.time_front); 
     let currentBalance = P;
@@ -168,11 +168,9 @@ async function load_data(inputs) {
     for (let i = 1; i <= N; i++) {
      years.push(`Year ${i}`);
   
-    let interest_for_year = currentBalance * R;
-  
-     currentBalance = (currentBalance + interest_for_year);
+    let accumulatedBalance = P * Math.pow(1 + R, i);
 
-     balances.push(Math.round(currentBalance));
+     balances.push(Math.round(accumulatedBalance));
     }
 
     if (loanChart) {
@@ -196,7 +194,7 @@ function resetLoan() {
   document.getElementById("principal").value = "";
   document.getElementById("rate").value = "";
   document.getElementById("time").value = "";
-  document.getElementById("income").value = "6";
+  document.getElementById("income").value = "";
   document.getElementById("LoanEmicalc").innerHTML = '<p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">Enter the info above to view the results</p>';
   document.getElementById("Reliability").innerHTML = '<p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">Enter the info above to view the results</p>';
   document.getElementById("aiPredictionResult").innerHTML = '<p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">Enter the info above to view the AI analysis.</p>';
