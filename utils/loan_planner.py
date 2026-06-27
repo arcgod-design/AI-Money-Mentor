@@ -17,7 +17,7 @@ def data_input(principal, rate, time, income):
           "Ratio":check.get("Ratio",0),
           "Zone":check.get("Zone",0)
           }
-  advice=financial_advkce(metrics)
+  advice=financial_advice(metrics)
   
   return {"Loan_Amount":loan_calc.get("Amount",0),
           "Loan_Interest":loan_calc.get("Interest",0),
