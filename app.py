@@ -598,7 +598,7 @@ def budget():
 
 @app.route("/loan_planner", methods=["GET"])
 def loan():
-    return render_template("loan_planner.html", active_page="loan_planner")
+    return render_template("loan_planner.html", active_page="loan")
 
 # ---------------- RETIREMENT ----------------
 @app.route('/retirement')
