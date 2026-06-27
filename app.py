@@ -599,6 +599,19 @@ def budget():
 
 @app.route("/loan_planner", methods=["GET","POST"])
 def loan():
+    if request.method == "POST":
+        try:
+            data = request.json or {}
+            principal = float(data.get("principal", 0))
+            rate = float(data.get("rate", 0))
+            time_years = float(data.get("time", 0))
+            income = float(data.get("income", 0))
+
+            result = data_input(principal, rate, time_years, income)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
     return render_template("loan_planner.html", active_page="loan")
 
 # ---------------- RETIREMENT ----------------
