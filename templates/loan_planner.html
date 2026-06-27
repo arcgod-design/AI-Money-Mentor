@@ -81,7 +81,7 @@ async function send_data() {
   const time_front=document.getElementById("time").value;
   const income_front=document.getElementById("income").value;
   if (!principal_front||!rate_front||!time_front||!income_front) {
-    showResult("⚠ Fill in all fields.");
+    alert("⚠ Fill in all fields.");
       return;
   }
   return { principal_front, rate_front, time_front, income_front };
@@ -96,7 +96,7 @@ async function load_data(inputs) {
       });
           
       if (data.error) {
-        showResult(`⚠ ${data.error}`);
+        alert(`⚠ ${data.error}`);
       }else { return data;
       }
   }catch(error) {
@@ -125,7 +125,7 @@ async function load_data(inputs) {
     <div class="card-title" style="color: var(--gold); margin-bottom: 6px;">AI Analysis</div>
      ${advice}
     </div>`;
-    document.getElementById("aiPredictionResult").innerText=aiHtml;
+    document.getElementById("aiPredictionResult").innerHTML=aiHtml;
 
     document.getElementById("LoanEmicalc").innerHTML = `
     <p>Amount: ₹${loan_amt}</p>
