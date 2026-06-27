@@ -36,7 +36,6 @@
       </div>
     </div>
   </div>
-</div>
 
 <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; max-width: 900px;">
     <div class="card" style="box-sizing: border-box;">
@@ -67,13 +66,13 @@
         </p>
       </div>
      </div>
-  </div>
-</div>
+   </div>
+ </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js">
 async function send_data() {
   const principal_front=document.getElementById("principal");
   const rate_front=document.getElementById("rate");
@@ -104,21 +103,91 @@ async function load_data(inputs) {
     return null;
   }
 }
-  const loan_amt=data.Loan_Amount;
-  const loan_int=data.Loan_Interest;
-  const emi=data.EMI;
-  const net_income=data.Net_take_income;
-  const ratio=data.Ratio;
-  const zone=data.Zone;
-  const advice=data.Advice;
   
   async function loan_calc(){
+    const inputs = await send_data();
+    if (!inputs) return;
+
+    const data = await load_data(inputs);
+    if (!data) return;
+    
+    const loan_amt=data.Loan_Amount;
+    const loan_int=data.Loan_Interest;
+    const emi=data.EMI;
+    const net_income=data.Net_take_income;
+    const ratio=data.Ratio;
+    const zone=data.Zone;
+    const advice=data.Advice;
+    
     let aiHTML=`<div style="margin-top: 20px; max-width: 900px;">
     <div class="card" style="width: 100%; box-sizing: border-box;">
       <div class="card-title" style="color: var(--gold); margin-bottom: 6px;">AI Analysis</div>
       ${advice}
-    </div>`
+    </div>`;
     document.getElementByJd("aiPredictionResult").innerText=aiHtml;
+
+    document.getElementById("LoanEmicalc").innerHTML = `
+    <p>Amount: ₹${loan_amt}</p>
+    <p>Interest: ₹${loan_int}</p>
+    <p>EMI: ₹${emi}</p>`;
+
+    let bg_color = "";
+    let text_color = "";
+
+    if (zone === 1) {
+     bg_color = "rgba(46, 196, 182, 0.15)";  
+     text_color = "#2ec4b6";                
+    } else if (zone === 0) {
+     bg_color = "rgba(255, 183, 3, 0.15)";   
+     text_color = "#ffb703";                 
+    } else if (zone === -1) {
+     bg_color = "rgba(230, 57, 70, 0.15)";   
+     text_color = "#e63946";                 
+      }
+
+    document.getElementById("Reliability").innerHTML = `
+    <p style="margin: 8px 0;"><strong>Take-home:</strong> ₹${net_income}</p>
+    <p style="margin: 8px 0;"><strong>Ratio:</strong> ${ratio}%</p>
+    <p style="margin: 8px 0;">
+    <strong>Zone:</strong> 
+    <span style="background-color: ${bg_color}; color: ${text_color}; padding: 3px 10px; border-radius: 12px; font-weight: bold; font-size: 12px; display: inline-block;">
+      ${zone}
+    </span>
+    </p>
+    `;
+
+    let years=[];
+    let balances=[];
+    let P = parseFloat(loan_amt);                  // Total Loan Amount
+    let R = parseFloat(inputs.rate_front) / 100;    // Annual Rate (e.g., 0.12)
+    let N = parseInt(inputs.time_front);
+    years.push("Start");
+    balances.push(Math.round(P));
+
+    for (let i = 1; i <= total_years; i++) {
+     years.push(`Year ${i}`);
+
+    for (let i = 1; i <= total_years; i++) {
+      years.push(`Year ${i}`);
+
+    let remaining_balance = total_loan - (total_loan / total_years) * i;
+  
+    balances.push(Math.round(remaining_balance));
+    document.getElementById("Chart").innerText=updateChart(years, balances);
+    }
+    
+  
+function resetLoan() {
+  document.getElementById("principal").value = "";
+  document.getElementById("rate").value = "";
+  document.getElementById("time").value = "";
+  document.getElementById("income").value = "6";
+  document.getElementById("LoanEmicalc").innerHTML = '<p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">Enter the info above to view the results</p>';
+  document.getElementById("Reliability").innerHTML = '<p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">Enter the info above to view the results</p>';
+  document.getElementById("aiPredictionResult").innerHTML = '<p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">Enter the info above to view the AI analysis.</p>';
+}
+
+    
       
     
   
