@@ -188,7 +188,31 @@ mail = Mail(app)
 # ---------------- DATABASE ----------------
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
+
+# ---------------- SECRET KEY ----------------
+# SECRET_KEY signs session cookies. In production it MUST come from the
+# environment - a hardcoded fallback would let anyone with the public repo
+# forge sessions and impersonate users. A weak fallback is only allowed for
+# local development (FLASK_DEBUG on, or FLASK_ENV != production).
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    _is_production = (
+        os.getenv("FLASK_ENV", "development").lower() == "production"
+        and os.getenv("FLASK_DEBUG", "").lower() not in ("1", "true", "yes")
+    )
+    if _is_production:
+        raise RuntimeError(
+            "SECRET_KEY environment variable is required in production. "
+            "Generate one with: "
+            "python -c \"import secrets; print(secrets.token_hex(32))\" "
+            "and set it before starting the app (see .env.example)."
+        )
+    _secret_key = "dev-secret-key"
+    print(
+        "[WARNING] SECRET_KEY not set - using an insecure development "
+        "fallback. Set SECRET_KEY in the environment before deploying."
+    )
+app.config["SECRET_KEY"] = _secret_key
 
 login_manager = LoginManager()
 login_manager.init_app(app)
