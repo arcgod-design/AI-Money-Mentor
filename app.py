@@ -629,6 +629,23 @@ def rag_clear():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ---------------- PASSWORD POLICY ----------------
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_REQUIREMENTS = (
+    f"Password must be at least {PASSWORD_MIN_LENGTH} characters long and "
+    "include at least one letter and one number."
+)
+
+
+def validate_password_strength(password):
+    """Return an error message if the password is too weak, else None."""
+    if not password or len(password) < PASSWORD_MIN_LENGTH:
+        return PASSWORD_REQUIREMENTS
+    if not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+        return PASSWORD_REQUIREMENTS
+    return None
+
+
 # ---------------- HOME ----------------
 @app.route("/register", methods=["POST"])
 def register():
@@ -638,7 +655,11 @@ def register():
     password = data.get("password")
     if not username or not password or not email:
         return jsonify({"error": "Username, email, and password are required."}), 400
-    
+
+    password_error = validate_password_strength(password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
+
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists."}), 400
     
