@@ -65,10 +65,7 @@ def financial_advice(message):
         res = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "You are a loan advisor, based on the info provided,provide the answers to the following questions:
-                Should the user take the loan or not?
-                What should they improve to make the loan suitable for them? 
-                Be precise and accurate."},
+                {"role": "system", "content": "You are a loan advisor, based on the info provided, provide the answers to the following questions:Should the user take the loan or not? What should they improve to make the loan suitable for them? Be precise and accurate."},
                 {"role": "user", "content": f"Here are the financial metrics:{user_prompt_string}"}
             ]
         )
