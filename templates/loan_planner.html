@@ -49,7 +49,7 @@
     </div>
   
   <div class="card" style=" box-sizing: border-box;">
-      <div class="card-title" style="color: var(--gold); margin-bottom: 6px;">Reliability Score</div>
+      <div class="card-title" style="color: var(--gold); margin-bottom: 6px;">Related Statistics</div>
       <div id="Reliability">
         <p style="color: var(--muted); font-size: 13px; margin: 0; padding-top: 4px;">
           Enter the info above to view the results
@@ -135,22 +135,22 @@ async function calcLoan(){
     if (zone === 1) {
      bg_color = "rgba(46, 196, 182, 0.15)";  
      text_color = "#2ec4b6";
-     zone_text = "Green (Safe)";
+     zone_text = "Safe Choice";
     } else if (zone === 0) {
      bg_color = "rgba(255, 183, 3, 0.15)";   
      text_color = "#ffb703"; 
-     zone_text = "Yellow (Moderate)";
+     zone_text = "Consider Better Terms and Conditions";
     } else if (zone === -1) {
      bg_color = "rgba(230, 57, 70, 0.15)";   
      text_color = "#e63946";
-     zone_text = "Red (Danger)";
+     zone_text = "Risky";
       }
 
     document.getElementById("Reliability").innerHTML = `
     <p style="margin: 8px 0;"><strong>Net Income:</strong> ₹${net_income}</p>
-    <p style="margin: 8px 0;"><strong>Ratio:</strong> ${ratio}%</p>
+    <p style="margin: 8px 0;"><strong>EMI to Income Ratio:</strong> ${ratio}%</p>
     <p style="margin: 8px 0;">
-    <strong>Zone:</strong> 
+    <strong>Verdict:</strong> 
     <span style="background-color: ${bg_color}; color: ${text_color}; padding: 3px 10px; border-radius: 12px; font-weight: bold; font-size: 12px; display: inline-block;">
       ${zone_text}
     </span>
