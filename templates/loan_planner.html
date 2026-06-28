@@ -26,11 +26,12 @@
         <button class="btn btn-gold" style="flex:1" onclick="calcLoan()" id="Btn">Calculate</button>
         <button class="btn btn-ghost" style="flex:1" onclick="resetLoan()" id="ResetBtn">Reset</button>
       </div>
+      <div id="Msg" class="result-box" style="margin-top: 10px;"></div>
     </div>
   
   
   <div class="card" style="min-height: 380px;">
-    <div class="card-title">Loan Repayment Graph</div>
+    <div class="card-title">Loan Graph</div>
       <div style="position: relative; height: 320px;">
         <canvas id="Chart"></canvas>
       </div>
@@ -85,17 +86,21 @@ async function calcLoan(){
       showResult("⚠ Fill in all fields.");
       return;
     }
-
+    setLoading('Btn', true);
     try{
-      const data = await apiFetch('/loan_info', {
+      const res = await fetch('/loan_info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
         principal: parseFloat(principal_front),
         rate: parseFloat(rate_front),
         time: parseFloat(time_front),
         income: parseFloat(income_front)
       });
-          
+      
+      const data = await res.json();
       if (data.error) {
-        alert(`⚠ ${data.error}`);
+        showResult("Msg",`⚠ ${data.error}`);
         return null;
       }
       
