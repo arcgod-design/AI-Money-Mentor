@@ -101,15 +101,10 @@ async function calcLoan(){
       const data = await res.json();
       if (data.error) {
         showResult("Msg",`⚠ ${data.error}`);
-        return null;
+        setLoading('Btn', false);
+        return;
       }
-      
-  }catch(error) {
-    console.error("API Error:", error);
-    return null;
-  }
   
-    
     const loan_amt=data.Loan_Amount;
     const loan_int=data.Loan_Interest;
     const emi=data.EMI;
@@ -187,6 +182,11 @@ async function calcLoan(){
     }]
   }
 });
+} catch (error) {
+    console.error("API Error:", error);
+    showResult("Msg", "⚠ Could not connect to server.");
+    }
+    setLoading('Btn', false);      
 }
   
 function resetLoan() {
@@ -201,6 +201,7 @@ function resetLoan() {
     loanChart.destroy();
     loanChart = null;
   }
+}
   </script>
 {% endblock %}
 
