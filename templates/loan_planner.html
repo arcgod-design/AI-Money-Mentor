@@ -86,6 +86,7 @@ async function calcLoan(){
       showResult("Msg","⚠ Fill in all fields.");
       return;
     }
+  
     setLoading('Btn', true);
     try{
       const res = await fetch('/loan_info', {
@@ -118,7 +119,7 @@ async function calcLoan(){
       .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text);">$1</strong>');
     
     let aiHtml=`<div style="color: var(--muted); font-size: 14px; margin: 0;">
-     ${advice}
+     ${formattedAdvice}
     </div>`;
     document.getElementById("aiPredictionResult").innerHTML=aiHtml;
 
