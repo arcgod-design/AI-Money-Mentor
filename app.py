@@ -214,6 +214,18 @@ if not _secret_key:
     )
 app.config["SECRET_KEY"] = _secret_key
 
+# ---------------- SESSION COOKIE HARDENING ----------------
+# Defense against CSRF and cookie theft for session-cookie auth:
+#   - SameSite=Lax stops the session cookie from being sent on cross-site
+#     POSTs, which blocks the common CSRF vector.
+#   - HttpOnly keeps the cookie out of reach of JavaScript (XSS theft).
+#   - Secure restricts the cookie to HTTPS in production.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("FLASK_ENV", "development").lower() == "production"
+)
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 db.init_app(app)
