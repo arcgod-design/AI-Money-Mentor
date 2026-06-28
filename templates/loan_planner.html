@@ -112,6 +112,10 @@ async function calcLoan(){
     const ratio=data.Ratio;
     const zone=data.Zone;
     const advice=data.Advice;
+    let formattedAdvice = advice
+      .replace(/\n/g, '<br>') 
+      .replace(/\d\.\s\*\*(.*?)\*\*(:?)/g, '<br><br><strong style="color:var(--gold); font-size:13px;">📌 $1$2</strong><br>') 
+      .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text);">$1</strong>');
     
     let aiHtml=`<div style="color: var(--muted); font-size: 14px; margin: 0;">
      ${advice}
@@ -119,9 +123,9 @@ async function calcLoan(){
     document.getElementById("aiPredictionResult").innerHTML=aiHtml;
 
     document.getElementById("LoanEmicalc").innerHTML = `
-    <p style="margin: 8px 0;"><strong>Amount: ₹${loan_amt}</strong></p>
-    <p style="margin: 8px 0;"><strong>Interest: ₹${loan_int}</strong></p>
-    <p style="margin: 8px 0;"><strong>EMI: ₹${emi}</strong></p>`;
+    <p style="margin: 8px 0;"><strong>Amount:</strong> ₹${loan_amt}</p>
+    <p style="margin: 8px 0;"><strong>Interest:</strong> ₹${loan_int}</p>
+    <p style="margin: 8px 0;"><strong>Monthly EMI:</strong> ₹${emi}</p>`;
 
     let bg_color = "";
     let text_color = "";
