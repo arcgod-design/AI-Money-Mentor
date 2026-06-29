@@ -60,6 +60,57 @@ app = Flask(__name__)
 # ---------------- INIT SOCKETIO ----------------
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# ---------------- RATE LIMITING ----------------
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# Per-route, opt-in limiter (no global default limits). Uses in-memory
+# storage which is fine for single-process/dev; swap storage_uri for Redis
+# in a multi-process production deployment.
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    storage_uri="memory://",
+)
+
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "error": "Too many requests. Please slow down and try again later."
+    }), 429
+
+
+# ---- Account lockout (brute-force protection) ----
+# After LOGIN_MAX_FAILED_ATTEMPTS consecutive failed logins for a given
+# username, further attempts are blocked for LOGIN_LOCKOUT_SECONDS.
+LOGIN_MAX_FAILED_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+_failed_login_attempts = {}  # username -> {"count": int, "locked_until": datetime|None}
+
+
+def _is_locked_out(username):
+    record = _failed_login_attempts.get(username)
+    if not record:
+        return False
+    locked_until = record.get("locked_until")
+    return bool(locked_until and datetime.utcnow() < locked_until)
+
+
+def _register_failed_login(username):
+    record = _failed_login_attempts.setdefault(
+        username, {"count": 0, "locked_until": None}
+    )
+    record["count"] += 1
+    if record["count"] >= LOGIN_MAX_FAILED_ATTEMPTS:
+        record["locked_until"] = datetime.utcnow() + timedelta(
+            seconds=LOGIN_LOCKOUT_SECONDS
+        )
+
+
+def _reset_failed_login(username):
+    _failed_login_attempts.pop(username, None)
+
 # ---------------- IMPORT MODELS ----------------
 from models import (
     db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, 
@@ -137,7 +188,43 @@ mail = Mail(app)
 # ---------------- DATABASE ----------------
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
+
+# ---------------- SECRET KEY ----------------
+# SECRET_KEY signs session cookies. In production it MUST come from the
+# environment - a hardcoded fallback would let anyone with the public repo
+# forge sessions and impersonate users. A weak fallback is only allowed for
+# local development (FLASK_DEBUG on, or FLASK_ENV != production).
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    _is_production = (
+        os.getenv("FLASK_ENV", "development").lower() == "production"
+        and os.getenv("FLASK_DEBUG", "").lower() not in ("1", "true", "yes")
+    )
+    if _is_production:
+        raise RuntimeError(
+            "SECRET_KEY environment variable is required in production. "
+            "Generate one with: "
+            "python -c \"import secrets; print(secrets.token_hex(32))\" "
+            "and set it before starting the app (see .env.example)."
+        )
+    _secret_key = "dev-secret-key"
+    print(
+        "[WARNING] SECRET_KEY not set - using an insecure development "
+        "fallback. Set SECRET_KEY in the environment before deploying."
+    )
+app.config["SECRET_KEY"] = _secret_key
+
+# ---------------- SESSION COOKIE HARDENING ----------------
+# Defense against CSRF and cookie theft for session-cookie auth:
+#   - SameSite=Lax stops the session cookie from being sent on cross-site
+#     POSTs, which blocks the common CSRF vector.
+#   - HttpOnly keeps the cookie out of reach of JavaScript (XSS theft).
+#   - Secure restricts the cookie to HTTPS in production.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("FLASK_ENV", "development").lower() == "production"
+)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -374,31 +461,11 @@ def process_recurring_incomes():
         db.session.rollback()
         print(f"❌ Error processing recurring incomes: {e}")
 
-# ---------------- INIT DATABASE ----------------
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule
-
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///money_mentor.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = os.getenv(
-    "SECRET_KEY",
-    "dev-secret-key"
-)
-from flask_login import LoginManager
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-db.init_app(app)
-
-from models import User
-
-with app.app_context():
-    db.create_all()
-
-# ---------------- INIT SAFETY ENGINE ----------------
-safety_engine = SafetyEngine()
-
 # ---------------- INIT GROQ ----------------
-# client is initialized in the startup validation block above
+# App config, extensions (Mail, LoginManager, db) and the user loader are
+# initialized once near the top of this module (see the DATABASE/EMAIL
+# config blocks). The Groq `client` is initialized in the startup
+# validation block above.
 
 # ── Dev-mode startup message ─────────────────────────────────
 if os.getenv("FLASK_ENV", "development") != "production":
@@ -406,10 +473,6 @@ if os.getenv("FLASK_ENV", "development") != "production":
         print("[OK] Groq client initialised successfully.")
     else:
         print("[WARNING] Groq client is running in offline mode.")
-
-@login_manager.user_loader
-def load_user(user_id):
-    return db.session.get(User, int(user_id))
 
 @app.before_request
 def auto_login():
@@ -578,6 +641,23 @@ def rag_clear():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ---------------- PASSWORD POLICY ----------------
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_REQUIREMENTS = (
+    f"Password must be at least {PASSWORD_MIN_LENGTH} characters long and "
+    "include at least one letter and one number."
+)
+
+
+def validate_password_strength(password):
+    """Return an error message if the password is too weak, else None."""
+    if not password or len(password) < PASSWORD_MIN_LENGTH:
+        return PASSWORD_REQUIREMENTS
+    if not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+        return PASSWORD_REQUIREMENTS
+    return None
+
+
 # ---------------- HOME ----------------
 @app.route("/register", methods=["POST"])
 def register():
@@ -587,7 +667,11 @@ def register():
     password = data.get("password")
     if not username or not password or not email:
         return jsonify({"error": "Username, email, and password are required."}), 400
-    
+
+    password_error = validate_password_strength(password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
+
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists."}), 400
     
@@ -601,18 +685,30 @@ def register():
     return jsonify({"status": "success"})
 
 @app.route("/login", methods=["POST"])
+@limiter.limit("5 per minute")
 def login():
     data = request.json or {}
     username = data.get("username")
-    email = data.get("email")
     password = data.get("password")
-    if not username or not password or not email:
-        return jsonify({"error": "Username, email, and password are required."}), 400
-    
+    # Login authenticates on username + password only; email is not used
+    # here (it is collected at registration), so it is not required.
+    if not username or not password:
+        return jsonify({"error": "Username and password are required."}), 400
+
+    # Block accounts that have hit the failed-attempt threshold.
+    if _is_locked_out(username):
+        return jsonify({
+            "error": "Account temporarily locked due to too many failed "
+                     "login attempts. Please try again later."
+        }), 429
+
     user = User.query.filter_by(username=username).first()
     if user and check_password_hash(user.password_hash, password):
+        _reset_failed_login(username)
         login_user(user)
         return jsonify({"status": "success"})
+
+    _register_failed_login(username)
     return jsonify({"error": "Invalid username or password."}), 401
 
 @app.route("/logout", methods=["POST"])
