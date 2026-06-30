@@ -1334,11 +1334,77 @@ class SipSchedule(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_notified_at": self.last_notified_at.isoformat() if self.last_notified_at else None,
             "total_invested": self.total_invested
-
         }
 
 
+class InsurancePolicy(db.Model):
+    __tablename__ = "insurance_policies"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref=db.backref("insurance_policies", lazy=True, cascade="all, delete-orphan"))
+    
+    policy_name = db.Column(db.String(100), nullable=False)
+    policy_type = db.Column(db.String(20), nullable=False)  # "life" or "health"
+    provider = db.Column(db.String(100), nullable=False)
+    sum_insured = db.Column(db.Float, nullable=False)
+    premium_amount = db.Column(db.Float, nullable=False)
+    premium_frequency = db.Column(db.String(20), nullable=False)  # "annual", "monthly", etc.
+    expiry_date = db.Column(db.String(40), nullable=True)  # YYYY-MM-DD
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "policy_name": self.policy_name,
+            "policy_type": self.policy_type,
+            "provider": self.provider,
+            "sum_insured": self.sum_insured,
+            "premium_amount": self.premium_amount,
+            "premium_frequency": self.premium_frequency,
+            "expiry_date": self.expiry_date,
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
 
+class InsuranceRecommendation(db.Model):
+    __tablename__ = "insurance_recommendations"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
+    user = db.relationship("User", backref=db.backref("insurance_recommendation", uselist=False, cascade="all, delete-orphan"))
+    
+    age = db.Column(db.Integer, nullable=False)
+    retirement_age = db.Column(db.Integer, nullable=False)
+    annual_income = db.Column(db.Float, nullable=False)
+    personal_expenses = db.Column(db.Float, nullable=False)
+    liabilities = db.Column(db.Float, nullable=False)
+    savings = db.Column(db.Float, nullable=False)
+    family_size = db.Column(db.String(20), nullable=False)
+    tier = db.Column(db.String(10), nullable=False)
+    pre_existing = db.Column(db.Boolean, default=False)
+    
+    recommended_life = db.Column(db.Float, nullable=False)
+    recommended_health = db.Column(db.Float, nullable=False)
+    ai_suggestions = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "age": self.age,
+            "retirement_age": self.retirement_age,
+            "annual_income": self.annual_income,
+            "personal_expenses": self.personal_expenses,
+            "liabilities": self.liabilities,
+            "savings": self.savings,
+            "family_size": self.family_size,
+            "tier": self.tier,
+            "pre_existing": self.pre_existing,
+            "recommended_life": self.recommended_life,
+            "recommended_health": self.recommended_health,
+            "ai_suggestions": self.ai_suggestions,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
