@@ -40,7 +40,7 @@ from werkzeug.security import (
 )
 
 
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule, CryptoHolding
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule, CryptoHolding, Tutorial, Quiz, Question, UserQuizAttempt, UserTutorialProgress, UserChallenge
 
 
 
@@ -233,6 +233,23 @@ from models import User
 
 with app.app_context():
     db.create_all()
+    # Migration: Add points column to users if it doesn't exist
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        columns = [c['name'] for c in inspector.get_columns('users')]
+        if 'points' not in columns:
+            db.session.execute(db.text("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0"))
+            db.session.commit()
+    except Exception as e:
+        app.logger.error(f"Database migration error (points column): {e}")
+
+    # Seed initial educational content
+    try:
+        from utils.gamification import seed_educational_content
+        seed_educational_content()
+    except Exception as e:
+        app.logger.error(f"Seeding educational content failed: {e}")
 
 # ---------------- INIT UTILITIES ----------------
 safety_engine = SafetyEngine()
@@ -1783,10 +1800,7 @@ couple_manager = CoupleFinanceManager(client)
 
 
 
-@app.route('/couple-planner')
-@login_required
-def couple_planner_page():
-    return render_template('couple_planner.html', active_page='couple_planner')
+
 
 @app.route('/api/couple/status', methods=['GET'])
 @login_required
@@ -2022,106 +2036,6 @@ def dismiss_notification():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/unread-count', methods=['GET'])
-@login_required
-def get_unread_count():
-    try:
-        result = notification_system.get_unread_count(current_user.id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/preferences', methods=['GET', 'POST'])
-@login_required
-def notification_preferences():
-    try:
-        if request.method == 'GET':
-            result = notification_system.get_preferences(current_user.id)
-            return jsonify(result)
-        else:
-            data = request.json
-            result = notification_system.setup_preferences(current_user.id, data)
-            return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# ---------------- PREDICTIVE FINANCIAL MODELS ----------------
-@app.route('/predictive-alerts')
-@login_required
-def predictive_alerts_page():
-    return render_template('predictive_alerts.html', active_page='predictive_alerts')
-
-
-@app.route('/api/notifications/list', methods=['GET'])
-@login_required
-
-def list_notifications():
-    try:
-        limit = request.args.get('limit', 20, type=int)
-        offset = request.args.get('offset', 0, type=int)
-        filter_type = request.args.get('filter', 'all')
-        result = notification_system.get_notifications(current_user.id, limit=limit, offset=offset, only_unread=(filter_type == 'unread'))
-        if filter_type in ['high', 'medium', 'low']:
-            result['notifications'] = [n for n in result['notifications'] if n.get('severity') == filter_type]
-            result['total'] = len(result['notifications'])
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/mark-read', methods=['POST'])
-@login_required
-def mark_notifications_read():
-    try:
-        data = request.json
-        notification_id = data.get('notification_id')
-        all_notifications = data.get('all', False)
-        if all_notifications:
-            result = notification_system.mark_read(current_user.id)
-        else:
-            result = notification_system.mark_read(current_user.id, notification_id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/dismiss', methods=['POST'])
-@login_required
-def dismiss_notification():
-    try:
-        data = request.json
-        notification_id = data.get('notification_id')
-        if not notification_id:
-            return jsonify({'error': 'Notification ID required'}), 400
-        result = notification_system.dismiss_notification(current_user.id, notification_id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/notifications/unread-count', methods=['GET'])
-@login_required
-def get_unread_count():
-    try:
-        result = notification_system.get_unread_count(current_user.id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/preferences', methods=['GET', 'POST'])
-@login_required
-def notification_preferences():
-    try:
-        if request.method == 'GET':
-            result = notification_system.get_preferences(current_user.id)
-            return jsonify(result)
-        else:
-            data = request.json
-            result = notification_system.setup_preferences(current_user.id, data)
-            return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 
 @app.route('/api/notifications/unread-count', methods=['GET'])
 @login_required
@@ -4465,12 +4379,243 @@ def get_achievements():
             "icon": "💎", "title": "Wealth Builder", "desc": "Net worth over ₹1L"
         })
         
+    # Check for Education Badges
+    tutorials_completed = UserTutorialProgress.query.filter_by(user_id=current_user.id, completed=True).count()
+    if tutorials_completed > 0:
+        achievements.append({
+            "icon": "📖", "title": "Scholar", "desc": "Completed your first tutorial"
+        })
+    if tutorials_completed >= 3:
+        achievements.append({
+            "icon": "🎓", "title": "Financial Guru", "desc": "Completed 3 or more tutorials"
+          })
+          
+    quiz_attempts = UserQuizAttempt.query.filter_by(user_id=current_user.id).count()
+    if quiz_attempts > 0:
+        achievements.append({
+            "icon": "🧠", "title": "Sharp Brain", "desc": "Completed your first quiz"
+        })
+        
+    # Fetch attempts to check for 100% score on any quiz
+    perfect_attempts = UserQuizAttempt.query.filter_by(user_id=current_user.id).all()
+    has_perfect_score = any(att.score == att.total_questions for att in perfect_attempts if att.total_questions > 0)
+    if has_perfect_score:
+        achievements.append({
+            "icon": "🏆", "title": "Perfect Score", "desc": "Scored 100% on any quiz"
+        })
+        
     if not achievements:
         achievements.append({
             "icon": "🌱", "title": "The Beginning", "desc": "Started your financial journey"
         })
         
     return jsonify({"achievements": achievements}), 200
+
+
+# ---------------- EDUCATION HUB ROUTES ----------------
+@app.route("/learn", methods=["GET"])
+@login_required
+def learn_page():
+    """Serves the main Learn and Earn hub page."""
+    return render_template("learn.html", active_page="learn")
+
+
+@app.route("/api/tutorials", methods=["GET"])
+@login_required
+def get_tutorials():
+    """Fetches all tutorials and their completed status for the current user."""
+    tutorials = Tutorial.query.all()
+    completed_ids = {p.tutorial_id for p in UserTutorialProgress.query.filter_by(user_id=current_user.id, completed=True).all()}
+    
+    result = []
+    for t in tutorials:
+        td = t.to_dict()
+        td['completed'] = t.id in completed_ids
+        result.append(td)
+    return jsonify({"tutorials": result}), 200
+
+
+@app.route("/api/tutorials/<int:tutorial_id>/complete", methods=["POST"])
+@login_required
+def complete_tutorial(tutorial_id):
+    """Marks a tutorial as completed, awards points, and returns total points."""
+    tutorial = Tutorial.query.get_or_404(tutorial_id)
+    
+    # Check if already completed
+    progress = UserTutorialProgress.query.filter_by(user_id=current_user.id, tutorial_id=tutorial_id).first()
+    if not progress:
+        progress = UserTutorialProgress(user_id=current_user.id, tutorial_id=tutorial_id, completed=True)
+        db.session.add(progress)
+        # Award points
+        current_user.points = (current_user.points or 0) + (tutorial.points_reward or 15)
+        db.session.commit()
+        points_awarded = tutorial.points_reward or 15
+    else:
+        points_awarded = 0
+        
+    return jsonify({
+        "success": True, 
+        "points_awarded": points_awarded, 
+        "total_points": current_user.points or 0
+    }), 200
+
+
+@app.route("/api/quizzes", methods=["GET"])
+@login_required
+def get_quizzes():
+    """Fetches all quizzes and the user's high score for each."""
+    quizzes = Quiz.query.all()
+    attempts = UserQuizAttempt.query.filter_by(user_id=current_user.id).all()
+    
+    high_scores = {}
+    for att in attempts:
+        score_pct = round((att.score / att.total_questions) * 100) if att.total_questions > 0 else 0
+        if att.quiz_id not in high_scores or score_pct > high_scores[att.quiz_id]:
+            high_scores[att.quiz_id] = score_pct
+            
+    result = []
+    for q in quizzes:
+        qd = q.to_dict()
+        qd['high_score'] = high_scores.get(q.id, None)
+        qd['total_questions'] = len(q.questions)
+        result.append(qd)
+    return jsonify({"quizzes": result}), 200
+
+
+@app.route("/api/quizzes/<int:quiz_id>/questions", methods=["GET"])
+@login_required
+def get_quiz_questions(quiz_id):
+    """Fetches the questions for a specific quiz (excludes correct options to prevent cheating)."""
+    quiz = Quiz.query.get_or_404(quiz_id)
+    questions = [q.to_dict(include_correct=False) for q in quiz.questions]
+    return jsonify({
+        "quiz_title": quiz.title,
+        "questions": questions
+    }), 200
+
+
+@app.route("/api/quizzes/<int:quiz_id>/submit", methods=["POST"])
+@login_required
+def submit_quiz(quiz_id):
+    """Submits the quiz answers, calculates points incrementally, and returns details."""
+    quiz = Quiz.query.get_or_404(quiz_id)
+    data = request.json or {}
+    user_answers = data.get("answers", {})
+    
+    questions = quiz.questions
+    if not questions:
+        return jsonify({"error": "Quiz has no questions"}), 400
+        
+    correct_count = 0
+    details = []
+    
+    for q in questions:
+        user_ans = user_answers.get(str(q.id))
+        is_correct = user_ans == q.correct_option
+        if is_correct:
+            correct_count += 1
+        details.append({
+            "id": q.id,
+            "question_text": q.question_text,
+            "user_answer": user_ans,
+            "correct_option": q.correct_option,
+            "is_correct": is_correct,
+            "explanation": q.explanation,
+            "options": {
+                "A": q.option_a,
+                "B": q.option_b,
+                "C": q.option_c,
+                "D": q.option_d
+            }
+        })
+        
+    # Determine high score change to award points incrementally
+    prior_attempts = UserQuizAttempt.query.filter_by(user_id=current_user.id, quiz_id=quiz_id).all()
+    prior_max_correct = max([att.score for att in prior_attempts]) if prior_attempts else 0
+    
+    # Award 10 points bonus for first attempt
+    attempt_bonus = 10 if not prior_attempts else 0
+    
+    # Award 10 points per new correct answer compared to prior high score
+    new_correct_increment = max(0, correct_count - prior_max_correct)
+    points_from_answers = new_correct_increment * 10
+    
+    total_awarded = attempt_bonus + points_from_answers
+    
+    current_user.points = (current_user.points or 0) + total_awarded
+    
+    attempt = UserQuizAttempt(
+        user_id=current_user.id,
+        quiz_id=quiz.id,
+        score=correct_count,
+        total_questions=len(questions)
+    )
+    db.session.add(attempt)
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "score": correct_count,
+        "total_questions": len(questions),
+        "points_awarded": total_awarded,
+        "total_points": current_user.points or 0,
+        "details": details
+    }), 200
+
+
+@app.route("/api/challenges", methods=["GET"])
+@login_required
+def get_challenges():
+    """Checks and updates user challenges, and returns their current progress."""
+    from utils.gamification import get_expense_streak, check_and_update_challenges
+    
+    # Run automatic check/update first
+    completed_now = check_and_update_challenges(current_user.id)
+    
+    # Calculate progress details
+    streak, _ = get_expense_streak(current_user.id)
+    portfolio_count = Portfolio.query.filter_by(user_id=current_user.id).count()
+    
+    goals = FinancialGoal.query.filter_by(user_id=current_user.id).all()
+    max_goal_target = max([g.target_amount for g in goals]) if goals else 0
+    
+    completed_challenges = {c.challenge_key for c in UserChallenge.query.filter_by(user_id=current_user.id, completed=True).all()}
+    
+    challenges_list = [
+        {
+            "key": "expense_streak_7",
+            "title": "Consistent Tracker",
+            "description": "Log your expenses for 7 consecutive days.",
+            "progress": min(streak, 7),
+            "target": 7,
+            "points_reward": 50,
+            "completed": "expense_streak_7" in completed_challenges
+        },
+        {
+            "key": "portfolio_builder_2",
+            "title": "Portfolio Builder",
+            "description": "Add at least 2 distinct stocks/assets to your portfolio.",
+            "progress": min(portfolio_count, 2),
+            "target": 2,
+            "points_reward": 30,
+            "completed": "portfolio_builder_2" in completed_challenges
+        },
+        {
+            "key": "goal_getter",
+            "title": "Goal Setter",
+            "description": "Create a financial goal with a target of ₹10,000 or more.",
+            "progress": min(int(max_goal_target), 10000),
+            "target": 10000,
+            "points_reward": 20,
+            "completed": "goal_getter" in completed_challenges
+        }
+    ]
+    
+    return jsonify({
+        "challenges": challenges_list,
+        "newly_completed": completed_now,
+        "total_points": current_user.points or 0
+    }), 200
 
 @app.route("/dashboard-data",methods=["GET","POST"])
 @login_required
