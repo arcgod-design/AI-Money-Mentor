@@ -69,6 +69,12 @@ class User(UserMixin, db.Model):
         nullable=False
     )
 
+    points = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False
+    )
+
 
 class Portfolio(db.Model):
     __tablename__ = "portfolio"
@@ -107,6 +113,48 @@ class Portfolio(db.Model):
             "pnl": round(pnl, 2),
             "pnl_percent": round(pnl_percent, 2),
             "investment_type": self.investment_type
+        }
+
+
+class CryptoHolding(db.Model):
+    __tablename__ = "crypto_holdings"
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref="crypto_holdings")
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    buy_price = db.Column(db.Float, nullable=False)
+    buy_date = db.Column(db.String(40), nullable=False)
+    notes = db.Column(db.String(200), nullable=True)
+    wallet_address = db.Column(db.String(100), nullable=True)
+    currency = db.Column(db.String(10), default='USD', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, current_price=None):
+        current_price = current_price or self.buy_price
+        current_value = self.quantity * current_price
+        invested_value = self.quantity * self.buy_price
+        pnl = current_value - invested_value
+        pnl_percent = (pnl / invested_value * 100) if invested_value > 0 else 0.0
+        
+        return {
+            "user_id": self.user_id,
+            "id": self.id,
+            "symbol": self.symbol.upper(),
+            "name": self.name,
+            "quantity": self.quantity,
+            "buy_price": self.buy_price,
+            "currency": self.currency,
+            "buy_date": self.buy_date,
+            "notes": self.notes,
+            "wallet_address": self.wallet_address,
+            "current_price": current_price,
+            "current_value": round(current_value, 2),
+            "invested_value": round(invested_value, 2),
+            "pnl": round(pnl, 2),
+            "pnl_percent": round(pnl_percent, 2),
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
 
@@ -1276,6 +1324,17 @@ class InsurancePolicy(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
+class UserQuizAttempt(db.Model):
+    __tablename__ = 'user_quiz_attempts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('quiz_attempts', lazy=True))
+    quiz_id = db.Column(db.Integer, db.ForeignKey('quizzes.id'), nullable=False)
+    quiz = db.relationship('Quiz')
+    score = db.Column(db.Integer, nullable=False)  # number of correct answers
+    total_questions = db.Column(db.Integer, nullable=False)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class InsuranceRecommendation(db.Model):
     __tablename__ = "insurance_recommendations"
