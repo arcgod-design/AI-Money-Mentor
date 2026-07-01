@@ -69,6 +69,12 @@ class User(UserMixin, db.Model):
         nullable=False
     )
 
+    points = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False
+    )
+
 
 class Portfolio(db.Model):
     __tablename__ = "portfolio"
@@ -107,6 +113,48 @@ class Portfolio(db.Model):
             "pnl": round(pnl, 2),
             "pnl_percent": round(pnl_percent, 2),
             "investment_type": self.investment_type
+        }
+
+
+class CryptoHolding(db.Model):
+    __tablename__ = "crypto_holdings"
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref="crypto_holdings")
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    buy_price = db.Column(db.Float, nullable=False)
+    buy_date = db.Column(db.String(40), nullable=False)
+    notes = db.Column(db.String(200), nullable=True)
+    wallet_address = db.Column(db.String(100), nullable=True)
+    currency = db.Column(db.String(10), default='USD', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, current_price=None):
+        current_price = current_price or self.buy_price
+        current_value = self.quantity * current_price
+        invested_value = self.quantity * self.buy_price
+        pnl = current_value - invested_value
+        pnl_percent = (pnl / invested_value * 100) if invested_value > 0 else 0.0
+        
+        return {
+            "user_id": self.user_id,
+            "id": self.id,
+            "symbol": self.symbol.upper(),
+            "name": self.name,
+            "quantity": self.quantity,
+            "buy_price": self.buy_price,
+            "currency": self.currency,
+            "buy_date": self.buy_date,
+            "notes": self.notes,
+            "wallet_address": self.wallet_address,
+            "current_price": current_price,
+            "current_value": round(current_value, 2),
+            "invested_value": round(invested_value, 2),
+            "pnl": round(pnl, 2),
+            "pnl_percent": round(pnl_percent, 2),
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
 
@@ -1243,11 +1291,141 @@ class SipSchedule(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_notified_at": self.last_notified_at.isoformat() if self.last_notified_at else None,
             "total_invested": self.total_invested
-
         }
 
 
+class Tutorial(db.Model):
+    __tablename__ = 'tutorials'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(250), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    points_reward = db.Column(db.Integer, default=15)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'content': self.content,
+            'category': self.category,
+            'points_reward': self.points_reward,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 
+class Quiz(db.Model):
+    __tablename__ = 'quizzes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(250), nullable=False)
+    points_reward = db.Column(db.Integer, default=20)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'points_reward': self.points_reward,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 
+class Question(db.Model):
+    __tablename__ = 'questions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    quiz_id = db.Column(db.Integer, db.ForeignKey('quizzes.id'), nullable=False)
+    quiz = db.relationship('Quiz', backref=db.backref('questions', lazy=True, cascade="all, delete-orphan"))
+    question_text = db.Column(db.Text, nullable=False)
+    option_a = db.Column(db.String(200), nullable=False)
+    option_b = db.Column(db.String(200), nullable=False)
+    option_c = db.Column(db.String(200), nullable=False)
+    option_d = db.Column(db.String(200), nullable=False)
+    correct_option = db.Column(db.String(1), nullable=False)  # 'A', 'B', 'C', or 'D'
+    explanation = db.Column(db.Text, nullable=True)
+
+    def to_dict(self, include_correct=False):
+        d = {
+            'id': self.id,
+            'quiz_id': self.quiz_id,
+            'question_text': self.question_text,
+            'option_a': self.option_a,
+            'option_b': self.option_b,
+            'option_c': self.option_c,
+            'option_d': self.option_d
+        }
+        if include_correct:
+            d['correct_option'] = self.correct_option
+            d['explanation'] = self.explanation
+        return d
+
+
+class UserQuizAttempt(db.Model):
+    __tablename__ = 'user_quiz_attempts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('quiz_attempts', lazy=True))
+    quiz_id = db.Column(db.Integer, db.ForeignKey('quizzes.id'), nullable=False)
+    quiz = db.relationship('Quiz')
+    score = db.Column(db.Integer, nullable=False)  # number of correct answers
+    total_questions = db.Column(db.Integer, nullable=False)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'quiz_id': self.quiz_id,
+            'score': self.score,
+            'total_questions': self.total_questions,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+
+class UserTutorialProgress(db.Model):
+    __tablename__ = 'user_tutorial_progress'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('tutorial_progress', lazy=True))
+    tutorial_id = db.Column(db.Integer, db.ForeignKey('tutorials.id'), nullable=False)
+    tutorial = db.relationship('Tutorial')
+    completed = db.Column(db.Boolean, default=True)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'tutorial_id': self.tutorial_id,
+            'completed': self.completed,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+
+class UserChallenge(db.Model):
+    __tablename__ = 'user_challenges'
+    __table_args__ = (db.UniqueConstraint('user_id', 'challenge_key', name='_user_challenge_uc'),)
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('challenges', lazy=True))
+    challenge_key = db.Column(db.String(50), nullable=False)
+    completed = db.Column(db.Boolean, default=True)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'challenge_key': self.challenge_key,
+            'completed': self.completed,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
