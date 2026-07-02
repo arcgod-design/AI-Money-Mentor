@@ -27,12 +27,19 @@ from werkzeug.security import (
 )
 from flask_mail import Mail, Message
 
-from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule
 
 
+from werkzeug.security import (
+    generate_password_hash,
+    check_password_hash
+)
+
+
+from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence, MilestoneNotification, SipSchedule, InsurancePolicy, InsuranceRecommendation
 
 
 from utils.portfolio_optimizer import PortfolioOptimizer
+from utils.insurance_planner import calculate_hlv, recommend_health_cover
 
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
@@ -1102,17 +1109,7 @@ def mfa_webauthn_verify():
     try:
         data = request.json
 
-        mfa = MFASystem(current_user)
-
-        if mfa.verify_webauthn(data):
-            return jsonify({
-                'success': True,
-                'message': 'WebAuthn verified'
-            })
-        else:
-            return jsonify({
-                'error': 'Verification failed'
-            }), 400
+def get_couple_goals():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2029,107 +2026,6 @@ def notification_preferences():
 def predictive_alerts_page():
     return render_template('predictive_alerts.html', active_page='predictive_alerts')
 
-
-@app.route('/api/notifications/list', methods=['GET'])
-@login_required
-
-def list_notifications():
-    try:
-        limit = request.args.get('limit', 20, type=int)
-        offset = request.args.get('offset', 0, type=int)
-        filter_type = request.args.get('filter', 'all')
-        result = notification_system.get_notifications(current_user.id, limit=limit, offset=offset, only_unread=(filter_type == 'unread'))
-        if filter_type in ['high', 'medium', 'low']:
-            result['notifications'] = [n for n in result['notifications'] if n.get('severity') == filter_type]
-            result['total'] = len(result['notifications'])
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/mark-read', methods=['POST'])
-@login_required
-def mark_notifications_read():
-    try:
-        data = request.json
-        notification_id = data.get('notification_id')
-        all_notifications = data.get('all', False)
-        if all_notifications:
-            result = notification_system.mark_read(current_user.id)
-        else:
-            result = notification_system.mark_read(current_user.id, notification_id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/dismiss', methods=['POST'])
-@login_required
-def dismiss_notification():
-    try:
-        data = request.json
-        notification_id = data.get('notification_id')
-        if not notification_id:
-            return jsonify({'error': 'Notification ID required'}), 400
-        result = notification_system.dismiss_notification(current_user.id, notification_id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/notifications/unread-count', methods=['GET'])
-@login_required
-def get_unread_count():
-    try:
-        result = notification_system.get_unread_count(current_user.id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/preferences', methods=['GET', 'POST'])
-@login_required
-def notification_preferences():
-    try:
-        if request.method == 'GET':
-            result = notification_system.get_preferences(current_user.id)
-            return jsonify(result)
-        else:
-            data = request.json
-            result = notification_system.setup_preferences(current_user.id, data)
-            return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-
-@app.route('/api/notifications/unread-count', methods=['GET'])
-@login_required
-def get_unread_count():
-    try:
-        result = notification_system.get_unread_count(current_user.id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/notifications/preferences', methods=['GET', 'POST'])
-@login_required
-def notification_preferences():
-    try:
-        if request.method == 'GET':
-            result = notification_system.get_preferences(current_user.id)
-            return jsonify(result)
-        else:
-            data = request.json
-            result = notification_system.setup_preferences(current_user.id, data)
-            return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ---------------- PREDICTIVE FINANCIAL MODELS ----------------
-@app.route('/predictive-alerts')
-@login_required
-def predictive_alerts_page():
-    return render_template('predictive_alerts.html', active_page='predictive_alerts')
-
 @app.route('/api/predict/train', methods=['POST'])
 @login_required
 def train_predictor():
@@ -2280,116 +2176,6 @@ def analyze_rebalance():
         return jsonify({'error': str(e)}), 500
         
     # ---------------- FIRE PLANNER ----------------
-from utils.fire_planner import FIREPlanner
-
-
-# ---------------- AUTO REBALANCER ----------------
-@app.route('/rebalancer')
-
-@login_required
-def rebalancer_page():
-    return render_template('rebalancer.html', active_page='rebalancer')
-
-@app.route('/api/rebalance/analyze', methods=['POST'])
-@login_required
-def analyze_rebalance():
-    try:
-        data = request.json
-        holdings = data.get('holdings', [])
-        target = data.get('target', {})
-        if not holdings:
-            return jsonify({'error': 'No holdings provided'}), 400
-        rebalancer = AutoRebalancer(holdings, target)
-        current_allocation = rebalancer.get_current_allocation()
-        rebalance = rebalancer.generate_rebalance_trades()
-        market_signals = {}
-        for h in holdings:
-            signal = rebalancer.get_market_signal(h['symbol'])
-            market_signals[h['symbol']] = signal
-        tax_harvesting = rebalancer.get_tax_harvesting_opportunities()
-        return jsonify({
-            'success': True,
-            'current_allocation': current_allocation,
-            'rebalance': rebalance,
-            'market_signals': market_signals,
-            'tax_harvesting': tax_harvesting
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# ---------------- FIRE PLANNER ----------------
-@app.route('/fire-planner')
-@login_required
-
-@login_required
-def rebalancer_page():
-    return render_template('rebalancer.html', active_page='rebalancer')
-
-
-@app.route('/api/rebalance/analyze', methods=['POST'])
-@login_required
-def analyze_rebalance():
-    try:
-        data = request.json
-        holdings = data.get('holdings', [])
-        target = data.get('target', {})
-        if not holdings:
-            return jsonify({'error': 'No holdings provided'}), 400
-        rebalancer = AutoRebalancer(holdings, target)
-        current_allocation = rebalancer.get_current_allocation()
-        rebalance = rebalancer.generate_rebalance_trades()
-        market_signals = {}
-        for h in holdings:
-            signal = rebalancer.get_market_signal(h['symbol'])
-            market_signals[h['symbol']] = signal
-        tax_harvesting = rebalancer.get_tax_harvesting_opportunities()
-        return jsonify({
-            'success': True,
-            'current_allocation': current_allocation,
-            'rebalance': rebalance,
-            'market_signals': market_signals,
-            'tax_harvesting': tax_harvesting
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-
-# ---------------- AUTO REBALANCER ----------------
-@app.route('/rebalancer')
-@login_required
-def rebalancer_page():
-    return render_template('rebalancer.html', active_page='rebalancer')
-
-@app.route('/api/rebalance/analyze', methods=['POST'])
-@login_required
-def analyze_rebalance():
-    try:
-        data = request.json
-        holdings = data.get('holdings', [])
-        target = data.get('target', {})
-        if not holdings:
-            return jsonify({'error': 'No holdings provided'}), 400
-        rebalancer = AutoRebalancer(holdings, target)
-        current_allocation = rebalancer.get_current_allocation()
-        rebalance = rebalancer.generate_rebalance_trades()
-        market_signals = {}
-        for h in holdings:
-            signal = rebalancer.get_market_signal(h['symbol'])
-            market_signals[h['symbol']] = signal
-        tax_harvesting = rebalancer.get_tax_harvesting_opportunities()
-        return jsonify({
-            'success': True,
-            'current_allocation': current_allocation,
-            'rebalance': rebalance,
-            'market_signals': market_signals,
-            'tax_harvesting': tax_harvesting
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ---------------- FIRE PLANNER ----------------
 @app.route('/fire-planner')
 @login_required
 
@@ -3158,91 +2944,7 @@ def add_portfolio_holding():
 
 
 
-@app.route('/api/ledger/accounts', methods=['GET'])
-@login_required
-def get_accounts():
-    try:
-        accounts = LedgerSystem.get_user_accounts(current_user.id)
-        summary = LedgerSystem.get_account_summary(current_user.id)
-        return jsonify({'success': True, 'accounts': [a.to_dict() for a in accounts], 'summary': summary})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
 
-@app.route('/api/ledger/account', methods=['POST'])
-@login_required
-def create_account():
-    try:
-        data = request.json
-        account_type = data.get('account_type')
-        account_name = data.get('account_name')
-        initial_balance = data.get('initial_balance', 0.0)
-        if not account_type or not account_name:
-            return jsonify({'error': 'Account type and name are required'}), 400
-        account = LedgerSystem.create_account(current_user.id, account_type, account_name, initial_balance)
-        return jsonify({'success': True, 'account': account.to_dict()})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/api/ledger/transfer', methods=['POST'])
-@login_required
-def transfer():
-    try:
-        data = request.json
-        from_account_id = data.get('from_account_id')
-        to_account_id = data.get('to_account_id')
-        amount = data.get('amount')
-        description = data.get('description', '')
-        if not all([from_account_id, to_account_id, amount]):
-            return jsonify({'error': 'Missing required fields'}), 400
-        result = LedgerSystem.transfer(from_account_id, to_account_id, float(amount), description)
-        return jsonify(result)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-
-
-@app.route('/api/ledger/accounts', methods=['GET'])
-@login_required
-def get_accounts():
-    try:
-        accounts = LedgerSystem.get_user_accounts(current_user.id)
-        summary = LedgerSystem.get_account_summary(current_user.id)
-        return jsonify({'success': True, 'accounts': [a.to_dict() for a in accounts], 'summary': summary})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/api/ledger/account', methods=['POST'])
-@login_required
-def create_account():
-    try:
-        data = request.json
-        account_type = data.get('account_type')
-        account_name = data.get('account_name')
-        initial_balance = data.get('initial_balance', 0.0)
-        if not account_type or not account_name:
-            return jsonify({'error': 'Account type and name are required'}), 400
-        account = LedgerSystem.create_account(current_user.id, account_type, account_name, initial_balance)
-        return jsonify({'success': True, 'account': account.to_dict()})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@app.route('/api/ledger/transfer', methods=['POST'])
-@login_required
-def transfer():
-    try:
-        data = request.json
-        from_account_id = data.get('from_account_id')
-        to_account_id = data.get('to_account_id')
-        amount = data.get('amount')
-        description = data.get('description', '')
-        if not all([from_account_id, to_account_id, amount]):
-            return jsonify({'error': 'Missing required fields'}), 400
-        result = LedgerSystem.transfer(from_account_id, to_account_id, float(amount), description)
-        return jsonify(result)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/portfolio/delete/<int:item_id>", methods=["DELETE"])
@@ -3662,97 +3364,6 @@ def list_portfolio():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
-@app.route("/portfolio/add", methods=["POST"])
-@login_required
-def add_portfolio_holding():
-    try:
-        data = request.json or {}
-        if not isinstance(data, dict):
-            raise ValidationError("Request body must be a JSON object")
-        symbol = validate_string(data.get("symbol"), "symbol").strip().upper()
-        if not symbol or not re.match(r"^[A-Z0-9.\-_]+$", symbol):
-            raise ValidationError("Invalid symbol format")
-        quantity = validate_float(data.get("quantity"), "quantity", min_val=0.0001)
-        buy_price = validate_float(data.get("buy_price"), "buy_price", min_val=0.01)
-        buy_date = validate_string(data.get("buy_date"), "buy_date")
-        try:
-            datetime.strptime(buy_date, "%Y-%m-%d")
-        except ValueError:
-            raise ValidationError("buy_date must be in YYYY-MM-DD format")
-        notes = data.get("notes", "")
-        if notes:
-            notes = validate_string(notes, "notes")
-        stock = yf.Ticker(symbol)
-        name = symbol
-        try:
-            info = stock.info
-            if info:
-                name = info.get("longName") or info.get("shortName") or symbol
-        except Exception:
-            if "." not in symbol:
-                symbol_ns = symbol + ".NS"
-                try:
-                    stock_ns = yf.Ticker(symbol_ns)
-                    info = stock_ns.info
-                    if info:
-                        name = info.get("longName") or info.get("shortName") or symbol_ns
-                        symbol = symbol_ns
-                except Exception:
-                    pass
-        price_data = get_stock_price(symbol)
-        if "error" in price_data:
-            raise ValidationError(price_data["error"])
-        holding = Portfolio(
-            user_id=current_user.id,
-            symbol=symbol,
-            name=name,
-            quantity=quantity,
-            buy_price=buy_price,
-            buy_date=buy_date,
-            notes=notes
-        )
-        db.session.add(holding)
-        db.session.commit()
-        return jsonify({"success": True, "message": f"Successfully added {symbol} to portfolio"})
-    except ValidationError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route("/portfolio/delete/<int:item_id>", methods=["DELETE"])
-@login_required
-def delete_portfolio_holding(item_id):
-    try:
-        holding = db.session.get(Portfolio, item_id)
-        if not holding or holding.user_id != current_user.id:
-            return jsonify({"error": "Holding not found or unauthorized"}), 404
-        db.session.delete(holding)
-        db.session.commit()
-        return jsonify({"success": True, "message": "Successfully deleted holding"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@app.route("/portfolio/delete/<int:item_id>", methods=["DELETE"])
-@login_required
-def delete_portfolio_holding(item_id):
-    try:
-        holding = db.session.get(Portfolio, item_id)
-        if not holding or holding.user_id != current_user.id:
-            return jsonify({"error": "Holding not found or unauthorized"}), 404
-        db.session.delete(holding)
-        db.session.commit()
-        return jsonify({"success": True, "message": "Successfully deleted holding"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-
-# ---------------- SETTINGS ----------------
-@app.route('/settings')
-def settings():
-    return render_template('settings.html')
 
 @app.route('/api/update-email', methods=['POST'])
 def update_email():
@@ -4221,14 +3832,6 @@ def get_cashflow_forecast():
 def health_check():
     return jsonify({"status": "ok", "service": "AI Money Mentor"}), 200
 
-
-
-# ---------------- AI STATUS ----------------
-@app.route("/api/status", methods=["GET"])
-def ai_status():
-    if client is not None:
-        return jsonify({"ai_online": True, "message": "AI Money Mentor is online and ready."})
-    return jsonify({"ai_online": False, "message": "AI features are unavailable — GROQ_API_KEY is not configured."})
 
 
 @app.route("/api/achievements", methods=["GET"])
@@ -5067,6 +4670,267 @@ def run_agent_route():
         raise e
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+# ---------------- INSURANCE PLANNER ----------------
+@app.route("/insurance", methods=["GET"])
+@login_required
+def insurance_page():
+    """Serves the main Insurance Planner & Optimization page."""
+    return render_template("insurance.html", active_page="insurance")
+
+
+@app.route("/api/insurance/policies", methods=["GET"])
+@login_required
+def get_insurance_policies():
+    """Retrieves all insurance policies logged by the current user."""
+    policies = InsurancePolicy.query.filter_by(user_id=current_user.id).all()
+    return jsonify({"policies": [p.to_dict() for p in policies]}), 200
+
+
+@app.route("/api/insurance/policies", methods=["POST"])
+@login_required
+def add_insurance_policy():
+    """Adds a new insurance policy."""
+    try:
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+            
+        policy_name = validate_string(data.get("policy_name"), "policy_name")
+        policy_type = validate_string(data.get("policy_type"), "policy_type")
+        if policy_type not in ["life", "health"]:
+            raise ValidationError("policy_type must be either 'life' or 'health'")
+            
+        provider = validate_string(data.get("provider"), "provider")
+        sum_insured = validate_float(data.get("sum_insured"), "sum_insured", min_val=0.0)
+        premium_amount = validate_float(data.get("premium_amount"), "premium_amount", min_val=0.0)
+        premium_frequency = validate_string(data.get("premium_frequency"), "premium_frequency")
+        expiry_date = data.get("expiry_date")
+        if expiry_date:
+            expiry_date = validate_string(expiry_date, "expiry_date")
+            try:
+                datetime.strptime(expiry_date, "%Y-%m-%d")
+            except ValueError:
+                raise ValidationError("expiry_date must be in YYYY-MM-DD format")
+                
+        policy = InsurancePolicy(
+            user_id=current_user.id,
+            policy_name=policy_name,
+            policy_type=policy_type,
+            provider=provider,
+            sum_insured=sum_insured,
+            premium_amount=premium_amount,
+            premium_frequency=premium_frequency,
+            expiry_date=expiry_date
+        )
+        db.session.add(policy)
+        db.session.commit()
+        
+        return jsonify({"status": "success", "policy": policy.to_dict()}), 201
+    except ValidationError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/insurance/policies/<int:policy_id>", methods=["PUT"])
+@login_required
+def update_insurance_policy(policy_id):
+    """Updates an existing insurance policy."""
+    try:
+        policy = InsurancePolicy.query.filter_by(id=policy_id, user_id=current_user.id).first_or_404()
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+            
+        if "policy_name" in data:
+            policy.policy_name = validate_string(data.get("policy_name"), "policy_name")
+        if "policy_type" in data:
+            policy_type = validate_string(data.get("policy_type"), "policy_type")
+            if policy_type not in ["life", "health"]:
+                raise ValidationError("policy_type must be either 'life' or 'health'")
+            policy.policy_type = policy_type
+        if "provider" in data:
+            policy.provider = validate_string(data.get("provider"), "provider")
+        if "sum_insured" in data:
+            policy.sum_insured = validate_float(data.get("sum_insured"), "sum_insured", min_val=0.0)
+        if "premium_amount" in data:
+            policy.premium_amount = validate_float(data.get("premium_amount"), "premium_amount", min_val=0.0)
+        if "premium_frequency" in data:
+            policy.premium_frequency = validate_string(data.get("premium_frequency"), "premium_frequency")
+        if "expiry_date" in data:
+            expiry_date = data.get("expiry_date")
+            if expiry_date:
+                expiry_date = validate_string(expiry_date, "expiry_date")
+                try:
+                    datetime.strptime(expiry_date, "%Y-%m-%d")
+                except ValueError:
+                    raise ValidationError("expiry_date must be in YYYY-MM-DD format")
+            policy.expiry_date = expiry_date
+            
+        db.session.commit()
+        return jsonify({"status": "success", "policy": policy.to_dict()}), 200
+    except ValidationError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/insurance/policies/<int:policy_id>", methods=["DELETE"])
+@login_required
+def delete_insurance_policy(policy_id):
+    """Deletes a policy."""
+    try:
+        policy = InsurancePolicy.query.filter_by(id=policy_id, user_id=current_user.id).first_or_404()
+        db.session.delete(policy)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "Policy deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/insurance/recommendation", methods=["GET"])
+@login_required
+def get_insurance_recommendation():
+    """Retrieves the saved insurance recommendation needs analysis and current gaps."""
+    rec = InsuranceRecommendation.query.filter_by(user_id=current_user.id).first()
+    
+    # Calculate existing coverage sums
+    policies = InsurancePolicy.query.filter_by(user_id=current_user.id).all()
+    existing_life = sum(p.sum_insured for p in policies if p.policy_type == "life")
+    existing_health = sum(p.sum_insured for p in policies if p.policy_type == "health")
+    
+    if not rec:
+        return jsonify({
+            "recommendation": None,
+            "existing_life": existing_life,
+            "existing_health": existing_health
+        }), 200
+        
+    res_dict = rec.to_dict()
+    res_dict["existing_life"] = existing_life
+    res_dict["existing_health"] = existing_health
+    res_dict["life_gap"] = max(0.0, rec.recommended_life - existing_life)
+    res_dict["health_gap"] = max(0.0, rec.recommended_health - existing_health)
+    
+    return jsonify({"recommendation": res_dict}), 200
+
+
+@app.route("/api/insurance/recommendation", methods=["POST"])
+@login_required
+def save_insurance_recommendation():
+    """Performs insurance needs analysis, saves recommendation, and calls the AI agent."""
+    try:
+        data = request.json or {}
+        if not isinstance(data, dict):
+            raise ValidationError("Request body must be a JSON object")
+            
+        age = validate_int(data.get("age"), "age", min_val=1)
+        retirement_age = validate_int(data.get("retirement_age"), "retirement_age", min_val=age)
+        annual_income = validate_float(data.get("annual_income"), "annual_income", min_val=0.0)
+        personal_expenses = validate_float(data.get("personal_expenses"), "personal_expenses", min_val=0.0)
+        liabilities = validate_float(data.get("liabilities"), "liabilities", min_val=0.0)
+        savings = validate_float(data.get("savings"), "savings", min_val=0.0)
+        
+        family_size = validate_string(data.get("family_size"), "family_size")
+        if family_size not in ["Individual", "Couple", "Family_1Kid", "Family_2Kids"]:
+            raise ValidationError("Invalid family_size value")
+            
+        tier = validate_string(data.get("tier"), "tier")
+        if tier not in ["1", "2"]:
+            raise ValidationError("tier must be either '1' or '2'")
+            
+        pre_existing = bool(data.get("pre_existing", False))
+        
+        # Calculations
+        recommended_life = calculate_hlv(age, retirement_age, annual_income, personal_expenses, liabilities, savings)
+        recommended_health = recommend_health_cover(family_size, tier, pre_existing)
+        
+        # Existing policies sums
+        policies = InsurancePolicy.query.filter_by(user_id=current_user.id).all()
+        existing_life = sum(p.sum_insured for p in policies if p.policy_type == "life")
+        existing_health = sum(p.sum_insured for p in policies if p.policy_type == "health")
+        
+        life_gap = max(0.0, recommended_life - existing_life)
+        health_gap = max(0.0, recommended_health - existing_health)
+        
+        # Call InsuranceAgent using Groq client if online
+        ai_suggestions = "AI Advisor suggestions are offline. Configure GROQ_API_KEY to enable recommendations."
+        if client:
+            try:
+                from utils.multi_agent import insurance_agent
+                query = f"Recommend life and health insurance covers for a {age}-year-old earning {annual_income} annually with {liabilities} liabilities and {savings} savings. Family size is {family_size}, Tier {tier} city."
+                context = {
+                    "age": age,
+                    "dependents": family_size,
+                    "annual_income": annual_income,
+                    "liabilities": liabilities,
+                    "savings": savings,
+                    "pre_existing": pre_existing,
+                    "tier": tier
+                }
+                from utils.agents.insurance_agent import InsuranceAgent
+                agent = InsuranceAgent()
+                agent.set_client(client)
+                task = {
+                    'query': query,
+                    'context': context
+                }
+                res = agent.execute(task)
+                ai_suggestions = res['response']
+            except Exception as e:
+                ai_suggestions = f"Could not fetch AI suggestions: {e}"
+                
+        rec = InsuranceRecommendation.query.filter_by(user_id=current_user.id).first()
+        if not rec:
+            rec = InsuranceRecommendation(
+                user_id=current_user.id,
+                age=age,
+                retirement_age=retirement_age,
+                annual_income=annual_income,
+                personal_expenses=personal_expenses,
+                liabilities=liabilities,
+                savings=savings,
+                family_size=family_size,
+                tier=tier,
+                pre_existing=pre_existing,
+                recommended_life=recommended_life,
+                recommended_health=recommended_health,
+                ai_suggestions=ai_suggestions
+            )
+            db.session.add(rec)
+        else:
+            rec.age = age
+            rec.retirement_age = retirement_age
+            rec.annual_income = annual_income
+            rec.personal_expenses = personal_expenses
+            rec.liabilities = liabilities
+            rec.savings = savings
+            rec.family_size = family_size
+            rec.tier = tier
+            rec.pre_existing = pre_existing
+            rec.recommended_life = recommended_life
+            rec.recommended_health = recommended_health
+            rec.ai_suggestions = ai_suggestions
+            
+        db.session.commit()
+        
+        res_dict = rec.to_dict()
+        res_dict["existing_life"] = existing_life
+        res_dict["existing_health"] = existing_health
+        res_dict["life_gap"] = life_gap
+        res_dict["health_gap"] = health_gap
+        
+        return jsonify({"status": "success", "recommendation": res_dict}), 200
+    except ValidationError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 # ---------------- MONEY SCORE ----------------
 @app.route("/money-score", methods=["GET", "POST"])
