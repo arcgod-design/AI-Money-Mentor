@@ -22,9 +22,6 @@ from flask_login import (
     LoginManager
 )
 
-
-
-
 from werkzeug.security import (
     generate_password_hash,
     check_password_hash
@@ -39,6 +36,9 @@ from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, Pric
 from utils.portfolio_optimizer import PortfolioOptimizer
 from utils.insurance_planner import calculate_hlv, recommend_health_cover
 
+from flask_socketio import SocketIO, emit, join_room, leave_room
+
+# Load environment variables from .env file (if present)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,6 @@ from utils.validation import ValidationError, validate_string, validate_float, v
 from utils.safety_engine import SafetyEngine
 from utils.portfolio_optimizer import PortfolioOptimizer
 from utils.voice_assistant import MultiLanguageVoiceAssistant
-from utils.couple_finance import CoupleFinanceManager
 from utils.financial_predictor import FinancialPredictor
 from utils.auto_rebalancer import AutoRebalancer
 from utils.fire_planner import FIREPlanner
@@ -994,10 +993,6 @@ def voice_test():
 
 
   # ---------------- COUPLE FINANCE PLANNER ----------------
-from utils.couple_finance import CoupleFinanceManager
-
-
-
         # ---------------- MFA SYSTEM ----------------
 from utils.mfa_system import MFASystem
 
@@ -1771,16 +1766,9 @@ def tax_filing_parse_form16():
 
 
   # ---------------- COUPLE FINANCE PLANNER ----------------
-from utils.couple_finance import CoupleFinanceManager
-
 couple_manager = CoupleFinanceManager(client)
 
 
-
-@app.route('/couple-planner')
-@login_required
-def couple_planner_page():
-    return render_template('couple_planner.html', active_page='couple_planner')
 
 @app.route('/api/couple/status', methods=['GET'])
 @login_required
