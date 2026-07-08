@@ -87,7 +87,7 @@ def calculate_tax(income, deduction_80c=0.0, deduction_80d=0.0, deduction_hra=0.
         surcharge_rate=15.0
     else:
         surcharge_rate=25.0
-    surcharge=tax_new*surcharge_rate
+    surcharge=tax_new*(surcharge_rate/100)
         
     cess_new = tax_new * 0.04
     total_new = round(tax_new + cess_new+surcharge, 2)
@@ -138,7 +138,7 @@ def calculate_tax(income, deduction_80c=0.0, deduction_80d=0.0, deduction_hra=0.
         surcharge_rate_=25.0
     else:
         surcharge_rate_=37.0
-    surcharge_old=tax_old*surcharge_rate_
+    surcharge_old=tax_old*(surcharge_rate_/100)
 
     
     total_old = round(tax_old + cess_old+ surcharge_old, 2)
