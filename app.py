@@ -6644,6 +6644,23 @@ def add_watchlist_item():
         wl = Watchlist(user_id=current_user.id, name="My Watchlist")
         db.session.add(wl)
         db.session.flush()
+    data = request.json or {}
+    if not isinstance(data, dict):
+        raise ValidationError("Request body must be a JSON object")
+
+    symbol = validate_string(data.get("symbol"), "symbol").upper()
+    asset_type = data.get("asset_type", "stock")
+
+    existing = WatchlistItem.query.filter_by(watchlist_id=wl.id, symbol=symbol).first()
+    if existing:
+        return jsonify({"error": "Symbol already in watchlist"}), 400
+
+    name = data.get("name", symbol)
+    item = WatchlistItem(watchlist_id=wl.id, symbol=symbol, name=name, asset_type=asset_type)
+    db.session.add(item)
+    db.session.commit()
+
+    return jsonify({"item": item.to_dict()}), 201
 
 
 # ---------------- RISK PROFILE & PORTFOLIO ADVISOR ----------------
@@ -6732,21 +6749,35 @@ def assess_risk_profile():
     if not isinstance(data, dict):
         raise ValidationError("Request body must be a JSON object")
 
-    symbol = validate_string(data.get("symbol"), "symbol").upper()
-    asset_type = data.get("asset_type", "stock")
+    answers = {}
+    for q in RISK_QUESTIONS:
+        val = data.get(q["key"])
+        if val not in q["options"]:
+            raise ValidationError(f"Invalid option for '{q['key']}': must be one of {q['options']}")
+        answers[q["key"]] = val
 
-    existing = WatchlistItem.query.filter_by(watchlist_id=wl.id, symbol=symbol).first()
-    if existing:
-        return jsonify({"error": "Symbol already in watchlist"}), 400
+    risk_category, risk_score = _calculate_risk_score(answers)
+    alloc = RISK_ALLOCATIONS[risk_category]
 
-    name = data.get("name", symbol)
-    item = WatchlistItem(watchlist_id=wl.id, symbol=symbol, name=name, asset_type=asset_type)
-    db.session.add(item)
+    profile = RiskProfile(
+        user_id=current_user.id,
+        risk_category=risk_category,
+        risk_score=risk_score,
+        age_range=answers.get("age_range"),
+        income_stability=answers.get("income_stability"),
+        risk_tolerance=answers.get("risk_tolerance"),
+        investment_horizon=answers.get("investment_horizon"),
+        loss_capacity=answers.get("loss_capacity"),
+        existing_experience=answers.get("existing_experience"),
+        equity_pct=alloc["equity"],
+        debt_pct=alloc["debt"],
+        gold_pct=alloc["gold"],
+        cash_pct=alloc["cash"],
+    )
+    db.session.add(profile)
     db.session.commit()
 
-    return jsonify({"item": item.to_dict()}), 201
-
-
+    return jsonify({"profile": profile.to_dict()}), 201
 @app.route("/api/watchlist/items/<int:item_id>", methods=["DELETE"])
 @login_required
 def delete_watchlist_item(item_id):
