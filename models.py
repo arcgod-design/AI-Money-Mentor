@@ -69,6 +69,12 @@ class User(UserMixin, db.Model):
         nullable=False
     )
 
+    points = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False
+    )
+
 
 class Portfolio(db.Model):
     __tablename__ = "portfolio"
@@ -107,6 +113,48 @@ class Portfolio(db.Model):
             "pnl": round(pnl, 2),
             "pnl_percent": round(pnl_percent, 2),
             "investment_type": self.investment_type
+        }
+
+
+class CryptoHolding(db.Model):
+    __tablename__ = "crypto_holdings"
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref="crypto_holdings")
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    buy_price = db.Column(db.Float, nullable=False)
+    buy_date = db.Column(db.String(40), nullable=False)
+    notes = db.Column(db.String(200), nullable=True)
+    wallet_address = db.Column(db.String(100), nullable=True)
+    currency = db.Column(db.String(10), default='USD', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, current_price=None):
+        current_price = current_price or self.buy_price
+        current_value = self.quantity * current_price
+        invested_value = self.quantity * self.buy_price
+        pnl = current_value - invested_value
+        pnl_percent = (pnl / invested_value * 100) if invested_value > 0 else 0.0
+        
+        return {
+            "user_id": self.user_id,
+            "id": self.id,
+            "symbol": self.symbol.upper(),
+            "name": self.name,
+            "quantity": self.quantity,
+            "buy_price": self.buy_price,
+            "currency": self.currency,
+            "buy_date": self.buy_date,
+            "notes": self.notes,
+            "wallet_address": self.wallet_address,
+            "current_price": current_price,
+            "current_value": round(current_value, 2),
+            "invested_value": round(invested_value, 2),
+            "pnl": round(pnl, 2),
+            "pnl_percent": round(pnl_percent, 2),
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
 
@@ -426,6 +474,15 @@ class FxRateCache(db.Model):
     rate = db.Column(db.Float, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "from_currency": self.from_currency,
+            "to_currency": self.to_currency,
+            "rate": self.rate,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class FinancialGoalMilestone(db.Model):
     __tablename__ = "financial_goal_milestones"
     id = db.Column(db.Integer, primary_key=True)
@@ -594,11 +651,9 @@ class LedgerEntry(db.Model):
             'amount': float(self.amount),
             'description': self.description,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
-
-
         }
 
-        # ============================================
+# ============================================
 # COUPLE FINANCE MODELS
 # ============================================
 
@@ -814,18 +869,15 @@ class CoupleAlert(db.Model):
             'message': self.message,
             'is_read': self.is_read,
             'created_at': self.created_at.isoformat() if self.created_at else None
-
-
         }
 
-
-        # ============================================
+# ============================================
 # COUPLE FINANCE MODELS
 # ============================================
 
 
 
-   # ============================================
+# ============================================
 # BANK INTEGRATION MODELS
 # ============================================
 
@@ -1100,9 +1152,7 @@ class NotificationPreference(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
-
-
-        # ============================================
+# ============================================
 # MFA MODELS
 # ============================================
 
@@ -1243,11 +1293,374 @@ class SipSchedule(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_notified_at": self.last_notified_at.isoformat() if self.last_notified_at else None,
             "total_invested": self.total_invested
+        }
 
+
+# ============================================
+# WATCHLIST MODELS
+# ============================================
+
+class Watchlist(db.Model):
+    """A user's watchlist for tracking stocks and mutual funds."""
+    __tablename__ = 'watchlists'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(80), nullable=False, default='My Watchlist')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='watchlists')
+    items = db.relationship('WatchlistItem', backref='watchlist', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name,
+            'item_count': len(self.items),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class WatchlistItem(db.Model):
+    """A stock or mutual fund tracked in a watchlist."""
+    __tablename__ = 'watchlist_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    watchlist_id = db.Column(db.Integer, db.ForeignKey('watchlists.id'), nullable=False)
+    symbol = db.Column(db.String(30), nullable=False)
+    name = db.Column(db.String(120), nullable=True)
+    asset_type = db.Column(db.String(20), default='stock')  # stock, mutual_fund
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    alerts = db.relationship('WatchlistAlert', backref='item', lazy=True, cascade='all, delete-orphan')
+
+    __table_args__ = (
+        db.UniqueConstraint('watchlist_id', 'symbol', name='uq_watchlist_symbol'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'watchlist_id': self.watchlist_id,
+            'symbol': self.symbol,
+            'name': self.name,
+            'asset_type': self.asset_type,
+            'added_at': self.added_at.isoformat() if self.added_at else None,
+        }
+
+
+class WatchlistAlert(db.Model):
+    """Custom price alert for a watchlist item."""
+    __tablename__ = 'watchlist_alerts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('watchlist_items.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    condition = db.Column(db.String(20), nullable=False)  # above, below, cross
+    target_price = db.Column(db.Float, nullable=False)
+    is_triggered = db.Column(db.Boolean, default=False)
+    last_checked_price = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_triggered_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship('User', backref='watchlist_alerts')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'item_id': self.item_id,
+            'condition': self.condition,
+            'target_price': self.target_price,
+            'is_triggered': self.is_triggered,
+            'last_checked_price': self.last_checked_price,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_triggered_at': self.last_triggered_at.isoformat() if self.last_triggered_at else None,
+        }
+
+
+# ============================================
+# RISK PROFILE MODELS
+# ============================================
+
+class RiskProfile(db.Model):
+    """Stores a user's risk assessment results and questionnaire responses."""
+    __tablename__ = 'risk_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    risk_category = db.Column(db.String(20), nullable=False)  # Conservative, Moderate, Aggressive
+    risk_score = db.Column(db.Float, nullable=False)  # 0-100 score
+    # Questionnaire answers
+    age_range = db.Column(db.String(20), nullable=True)  # 18-30, 31-45, 46-60, 60+
+    income_stability = db.Column(db.String(20), nullable=True)  # stable, moderate, variable
+    risk_tolerance = db.Column(db.String(20), nullable=True)  # low, medium, high
+    investment_horizon = db.Column(db.String(20), nullable=True)  # short (<3y), medium (3-7y), long (7y+)
+    loss_capacity = db.Column(db.String(20), nullable=True)  # cannot_loss, some_loss, can_loss
+    existing_experience = db.Column(db.String(20), nullable=True)  # beginner, intermediate, experienced
+    # Recommended allocation
+    equity_pct = db.Column(db.Float, default=0)
+    debt_pct = db.Column(db.Float, default=0)
+    gold_pct = db.Column(db.Float, default=0)
+    cash_pct = db.Column(db.Float, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref='risk_profiles')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'risk_category': self.risk_category,
+            'risk_score': self.risk_score,
+            'age_range': self.age_range,
+            'income_stability': self.income_stability,
+            'risk_tolerance': self.risk_tolerance,
+            'investment_horizon': self.investment_horizon,
+            'loss_capacity': self.loss_capacity,
+            'existing_experience': self.existing_experience,
+            'equity_pct': self.equity_pct,
+            'debt_pct': self.debt_pct,
+            'gold_pct': self.gold_pct,
+            'cash_pct': self.cash_pct,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
 
 
+class InsurancePolicy(db.Model):
+    __tablename__ = "insurance_policies"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user = db.relationship("User", backref=db.backref("insurance_policies", lazy=True, cascade="all, delete-orphan"))
+    
+    policy_name = db.Column(db.String(100), nullable=False)
+    policy_type = db.Column(db.String(20), nullable=False)  # "life" or "health"
+    provider = db.Column(db.String(100), nullable=False)
+    sum_insured = db.Column(db.Float, nullable=False)
+    premium_amount = db.Column(db.Float, nullable=False)
+    premium_frequency = db.Column(db.String(20), nullable=False)  # "annual", "monthly", etc.
+    expiry_date = db.Column(db.String(40), nullable=True)  # YYYY-MM-DD
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "policy_name": self.policy_name,
+            "policy_type": self.policy_type,
+            "provider": self.provider,
+            "sum_insured": self.sum_insured,
+            "premium_amount": self.premium_amount,
+            "premium_frequency": self.premium_frequency,
+            "expiry_date": self.expiry_date,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+class UserQuizAttempt(db.Model):
+    __tablename__ = 'user_quiz_attempts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('quiz_attempts', lazy=True))
+    quiz_id = db.Column(db.Integer, db.ForeignKey('quizzes.id'), nullable=False)
+    quiz = db.relationship('Quiz')
+    score = db.Column(db.Integer, nullable=False)  # number of correct answers
+    total_questions = db.Column(db.Integer, nullable=False)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class InsuranceRecommendation(db.Model):
+    __tablename__ = "insurance_recommendations"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
+    user = db.relationship("User", backref=db.backref("insurance_recommendation", uselist=False, cascade="all, delete-orphan"))
+    
+    age = db.Column(db.Integer, nullable=False)
+    retirement_age = db.Column(db.Integer, nullable=False)
+    annual_income = db.Column(db.Float, nullable=False)
+    personal_expenses = db.Column(db.Float, nullable=False)
+    liabilities = db.Column(db.Float, nullable=False)
+    savings = db.Column(db.Float, nullable=False)
+    family_size = db.Column(db.String(20), nullable=False)
+    tier = db.Column(db.String(10), nullable=False)
+    pre_existing = db.Column(db.Boolean, default=False)
+    
+    recommended_life = db.Column(db.Float, nullable=False)
+    recommended_health = db.Column(db.Float, nullable=False)
+    ai_suggestions = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "age": self.age,
+            "retirement_age": self.retirement_age,
+            "annual_income": self.annual_income,
+            "personal_expenses": self.personal_expenses,
+            "liabilities": self.liabilities,
+            "savings": self.savings,
+            "family_size": self.family_size,
+            "tier": self.tier,
+            "pre_existing": self.pre_existing,
+            "recommended_life": self.recommended_life,
+            "recommended_health": self.recommended_health,
+            "ai_suggestions": self.ai_suggestions,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+# ============================================
+# GROUP EXPENSE MODELS
+# ============================================
+
+class ExpenseGroup(db.Model):
+    """A group of users who share expenses (roommates, trip companions, etc.)."""
+    __tablename__ = 'expense_groups'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(300), nullable=True)
+    currency = db.Column(db.String(10), default='INR', nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    creator = db.relationship('User', backref='created_groups')
+    members = db.relationship('GroupMember', backref='group', lazy=True, cascade='all, delete-orphan')
+    expenses = db.relationship('GroupExpense', backref='group', lazy=True, cascade='all, delete-orphan')
+    settlements = db.relationship('GroupSettlement', backref='group', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'currency': self.currency,
+            'created_by': self.created_by,
+            'is_active': self.is_active,
+            'member_count': len(self.members),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class GroupMember(db.Model):
+    """Membership of a user in an ExpenseGroup."""
+    __tablename__ = 'group_members'
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('expense_groups.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    role = db.Column(db.String(20), default='member')  # admin, member
+    nickname = db.Column(db.String(80), nullable=True)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+
+    user = db.relationship('User', backref='group_memberships')
+
+    __table_args__ = (
+        db.UniqueConstraint('group_id', 'user_id', name='uq_group_member'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'group_id': self.group_id,
+            'user_id': self.user_id,
+            'role': self.role,
+            'nickname': self.nickname,
+            'joined_at': self.joined_at.isoformat() if self.joined_at else None,
+        }
+
+
+class GroupExpense(db.Model):
+    """An expense logged within a group, paid by one member."""
+    __tablename__ = 'group_expenses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('expense_groups.id'), nullable=False)
+    description = db.Column(db.String(200), nullable=False)
+    amount = db.Column(db.Numeric(15, 2), nullable=False)
+    category = db.Column(db.String(50), default='Other')
+    paid_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    split_type = db.Column(db.String(20), default='EQUAL')  # EQUAL, PERCENTAGE, EXACT
+    expense_date = db.Column(db.Date, nullable=False)
+    receipt_url = db.Column(db.String(300), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    payer = db.relationship('User', backref='group_expenses_paid')
+    splits = db.relationship('GroupExpenseSplit', backref='expense', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'group_id': self.group_id,
+            'description': self.description,
+            'amount': float(self.amount),
+            'category': self.category,
+            'paid_by': self.paid_by,
+            'split_type': self.split_type,
+            'expense_date': self.expense_date.isoformat() if self.expense_date else None,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'splits': [s.to_dict() for s in self.splits],
+        }
+
+
+class GroupExpenseSplit(db.Model):
+    """How much each member owes for a GroupExpense."""
+    __tablename__ = 'group_expense_splits'
+
+    id = db.Column(db.Integer, primary_key=True)
+    expense_id = db.Column(db.Integer, db.ForeignKey('group_expenses.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    amount = db.Column(db.Numeric(15, 2), nullable=False)
+    percentage = db.Column(db.Numeric(5, 2), nullable=True)
+    is_settled = db.Column(db.Boolean, default=False)
+
+    user = db.relationship('User', backref='group_expense_splits')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'expense_id': self.expense_id,
+            'user_id': self.user_id,
+            'amount': float(self.amount),
+            'percentage': float(self.percentage) if self.percentage else None,
+            'is_settled': self.is_settled,
+        }
+
+
+class GroupSettlement(db.Model):
+    """A payment made between members to settle debts within a group."""
+    __tablename__ = 'group_settlements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('expense_groups.id'), nullable=False)
+    from_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    to_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    amount = db.Column(db.Numeric(15, 2), nullable=False)
+    note = db.Column(db.String(200), nullable=True)
+    settled_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    from_user = db.relationship('User', foreign_keys=[from_user_id], backref='settlements_made')
+    to_user = db.relationship('User', foreign_keys=[to_user_id], backref='settlements_received')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'group_id': self.group_id,
+            'from_user_id': self.from_user_id,
+            'to_user_id': self.to_user_id,
+            'amount': float(self.amount),
+            'note': self.note,
+            'settled_at': self.settled_at.isoformat() if self.settled_at else None,
+        }
 
 

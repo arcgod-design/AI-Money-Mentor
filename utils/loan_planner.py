@@ -6,9 +6,9 @@ import json
 # Load environment variables
 load_dotenv()
 def data_input(principal, rate, time, income):
-  loan_calc=compound_interest_calculation(principal, rate, time)
   emi_calc=emi_calculation(principal, rate, time, income)
   emi=emi_calc.get("EMI",0)
+  loan_calc=loan_totals_from_emi(principal, emi, time)
   check=financial_check(emi, income)
   metrics={"Loan_Amount":loan_calc.get("Amount",0),
           "Loan_Interest":loan_calc.get("Interest",0),
@@ -28,10 +28,10 @@ def data_input(principal, rate, time, income):
           "Advice": advice
   }
 
-def compound_interest_calculation(principal, rate, time):#rate per annum, time in years, amount in rupees
-  amt=principal*((1+(rate/100))**time)
-  interest=amt-principal
-  return {"Amount":amt,"Interest":interest}
+def loan_totals_from_emi(principal, emi, time):#derives amortization-consistent totals from the EMI, time in years
+  total_paid=emi*time*12
+  total_interest=total_paid-principal
+  return {"Amount":total_paid,"Interest":total_interest}
 
 def emi_calculation(principal, rate, time, income):
   m_rate=rate/12
@@ -47,6 +47,8 @@ def emi_calculation(principal, rate, time, income):
   return {"EMI":emi,"Net_take_home":net}
   
 def financial_check(emi, income):
+  if income is None or income <= 0:
+    raise ValueError("Income must be greater than 0")
   ratio=(emi/income)
   percentage=(emi/income)*100
   if percentage<30:

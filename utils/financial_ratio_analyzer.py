@@ -106,7 +106,7 @@ class FinancialRatioAnalyzer:
                     'your_value': value,
                     'benchmark': benchmark,
                     'difference': round(value - benchmark, 2),
-                    'status': self._get_status(value, benchmark)
+                    'status': self._get_status(value, benchmark, ratio)
                 }
         
         return {
@@ -172,12 +172,21 @@ class FinancialRatioAnalyzer:
         return benchmarks.get(industry, benchmarks['general'])
     
     def _get_status(self, value: float, benchmark: float) -> str:
+    # Ratios where a LOWER value than the benchmark is actually better
+    LOWER_IS_BETTER = {'debt_to_equity', 'debt_ratio'}
+
+    def _get_status(self, value: float, benchmark: float, ratio_key: str = None) -> str:
         """Get status based on comparison with benchmark"""
         if benchmark == 0:
             return 'neutral'
         
         diff = value - benchmark
-        
+
+        # For ratios where lower is better (leverage/debt ratios), invert the
+        # comparison so that being below benchmark counts as "excellent"/"good".
+        if ratio_key in self.LOWER_IS_BETTER:
+            diff = -diff
+
         # For ratios where higher is better
         if diff >= 0.2 * benchmark:
             return 'excellent'
@@ -187,7 +196,6 @@ class FinancialRatioAnalyzer:
             return 'fair'
         else:
             return 'poor'
-    
     def _get_overall_health(self, comparison: Dict) -> Dict:
         """Calculate overall financial health score"""
         scores = []
