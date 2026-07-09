@@ -3681,7 +3681,9 @@ def unsubscribe():
 # ---------------- TEST EMAIL ROUTES ----------------
 @app.route('/test-email')
 def test_email():
-    email = os.getenv('EMAIL_USER', 'your-email@gmail.com')
+    email = os.getenv('EMAIL_USER')
+    if not email:
+        return jsonify({"error": "EMAIL_USER not configured — cannot send test email"}), 503
     send_weekly_email(email)
     return "Test email sent! Check your inbox."
 
