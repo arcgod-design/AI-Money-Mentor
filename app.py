@@ -42,6 +42,10 @@ from models import (
     GroupExpense, GroupExpenseSplit, GroupSettlement,
     Watchlist, WatchlistItem, WatchlistAlert,
     RiskProfile, InsurancePolicy, InsuranceRecommendation,
+    BankConnection, BankTransaction, FraudAlert, Notification,
+    NotificationPreference, InvestmentGoal, GoalAllocation,
+    GoalContribution, GoalRecommendation, Couple,
+    CoupleSubscription, User,
 )
 
 
@@ -125,16 +129,6 @@ def _register_failed_login(username):
 
 def _reset_failed_login(username):
     _failed_login_attempts.pop(username, None)
-
-# ---------------- IMPORT MODELS ----------------
-from models import (
-    db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, 
-    PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, 
-    Portfolio, Account, Transaction, LedgerEntry,
-    BankConnection, BankTransaction, FraudAlert, Notification,
-    NotificationPreference, InvestmentGoal, GoalAllocation,
-    GoalContribution, GoalRecommendation, Couple
-)
 
 # ---------------- IMPORT UTILS ----------------
 from utils.sip import calculate_sip, calculate_goal_sip, calculate_stepup_sip
@@ -244,8 +238,6 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 db.init_app(app)
 
-from models import User
-
 with app.app_context():
     db.create_all()
 
@@ -351,9 +343,6 @@ def process_recurring_expenses():
     today = date.today()
     try:
 
-
-        from models import db, Expense, Asset, Liability, BudgetLimit, BudgetAlert, PriceAlert, PriceAlertEvent, FinancialGoal, RecurringExpense, Portfolio, Account, Transaction, LedgerEntry, FxRateCache, FinancialGoalMilestone, RecurringIncome, IncomeOccurrence
-
         
         # Get all active recurring expenses due today
 
@@ -415,7 +404,6 @@ def process_recurring_incomes():
     today = date.today()
     
     try:
-        from models import db, RecurringIncome, IncomeOccurrence
         
         # Get all active recurring incomes due today
         due_incomes = RecurringIncome.query.filter(
@@ -961,7 +949,6 @@ def export_parsed_expenses():
             return jsonify({'success': False, 'error': 'No transactions to export'}), 400
         
         # Save to expense tracker
-        from models import Expense
         count = 0
         for exp in expenses:
             expense = Expense(
@@ -1347,7 +1334,6 @@ def document_parser_page():
 #             return jsonify({'success': False, 'error': 'No transactions to export'}), 400
         
 #         # Save to expense tracker
-#         from models import Expense
 #         count = 0
 #         for exp in expenses:
 #             expense = Expense(
@@ -3716,7 +3702,6 @@ def subscriptions_page():
 # API: List subscriptions
 @app.route('/api/subscriptions', methods=['GET'])
 def list_subscriptions():
-    from models import CoupleSubscription, User
     user_id = 1  # placeholder for current user auth
     subs = CoupleSubscription.query.filter(
         (CoupleSubscription.user_id == user_id) | (CoupleSubscription.partner_user_id == user_id)
