@@ -36,3 +36,12 @@ would reject the existing JSON POST endpoints.
   sessions. See `.env.example`.
 - Never commit a real `.env` file; it is gitignored.
 - `FLASK_DEBUG` must never be enabled in production.
+
+## CodeQL Audit Report
+
+See [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) for the consolidated
+CodeQL / dependency-audit triage report (issue #521). It lists every CodeQL
+flag raised against the current `main`, the resolution path for each
+(hardcoded-credential removal, weak-hash replacement, XSS-via-`innerHTML`
+guarding, model-import deinterleaving, top-level import restoration) and
+the corresponding PR number.
