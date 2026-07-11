@@ -133,7 +133,7 @@
         </div>
         <div style="background:rgba(255,255,255,0.02);border-radius:8px;padding:12px;text-align:center;">
           <div style="font-size:11px;color:var(--muted);">Taxable Income</div>
-          <div style="font-size:18px;font-weight:700;">₹${fmtNum(tax.taxable_income)}</div>
+          <div style="font-size:18px;font-weight:700;">₹${fmtNum(tax.taxable_income.new_regime)}</div>
         </div>
         <div style="background:rgba(212,168,67,0.05);border-radius:8px;padding:12px;text-align:center;">
           <div style="font-size:11px;color:var(--muted);">Tax Payable</div>
@@ -146,14 +146,14 @@
           <div style="font-size:20px;font-weight:700;color:${tax.new_regime.total_tax <= tax.old_regime.total_tax ? '#2ecc8a' : '#5a6a82'}">
             ₹${fmtNum(tax.new_regime.total_tax)}
           </div>
-          <div style="font-size:11px;color:var(--muted);">Effective Rate: ${tax.new_regime.effective_rate}%</div>
+          <div style="font-size:11px;color:var(--muted);">Taxable Income: ₹${fmtNum(tax.taxable_income.new_regime)}</div>
         </div>
         <div style="background:rgba(46,204,138,0.05);border-radius:8px;padding:12px;">
           <div style="font-size:12px;color:var(--muted);">Old Regime</div>
           <div style="font-size:20px;font-weight:700;color:${tax.old_regime.total_tax <= tax.new_regime.total_tax ? '#2ecc8a' : '#5a6a82'}">
             ₹${fmtNum(tax.old_regime.total_tax)}
           </div>
-          <div style="font-size:11px;color:var(--muted);">Effective Rate: ${tax.old_regime.effective_rate}%</div>
+          <div style="font-size:11px;color:var(--muted);">Taxable Income: ₹${fmtNum(tax.taxable_income.old_regime)}</div>
         </div>
       </div>
       <div style="margin-top:10px;padding:10px;background:rgba(212,168,67,0.1);border-radius:8px;text-align:center;">
